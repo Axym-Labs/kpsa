@@ -2135,6 +2135,146 @@ def plot_timeseries_circuits(rows, output):
     save_plot(fig, output)
 
 
+def build_protein_application_table(feature_path, influence_path):
+    """Flatten the two frozen ESM2 causal confirmations."""
+    studies = (
+        (
+            "feature_localization",
+            read_json(feature_path),
+            "activation_attribution",
+            "activation_gap_recovered",
+        ),
+        (
+            "parameter_influence",
+            read_json(influence_path),
+            "direct_parameter",
+            "direct_parameter_gap_recovered",
+        ),
+    )
+    labels = {
+        "exact_rbf": "KPSA",
+        "matched_shuffle": "Shuffled pairing",
+        "nearest": "Nearest example",
+        "scalar": "Scalar sensitivity",
+        "categorical": "Residue category",
+        "direct_parameter": "Direct parameter gradient",
+        "activation_attribution": "Activation attribution",
+    }
+    rows = []
+    for application, payload, oracle, gap_key in studies:
+        for fraction, methods in payload["summaries"].items():
+            selected_groups = next(
+                record["selected_groups"]
+                for record in payload["records"]
+                if f"{record['fraction']:g}" == fraction
+            )
+            for method, summary in methods.items():
+                rows.append(
+                    {
+                        "application": application,
+                        "parameter_fraction": float(fraction),
+                        "selected_groups": selected_groups,
+                        "method": labels[method],
+                        "mean": summary["mean"],
+                        "ci95_low": summary["ci95_low"],
+                        "ci95_high": summary["ci95_high"],
+                        "queries": summary["n"],
+                        "gap_recovered": (
+                            payload["comparisons"][fraction]["exact_rbf"][gap_key]
+                            if method == "exact_rbf"
+                            else ""
+                        ),
+                        "reference": labels[oracle],
+                    }
+                )
+    return rows
+
+
+def plot_protein_applications(rows, output):
+    """Show the same frozen protein atlas under both causal applications."""
+    methods = (
+        ("KPSA", PRIMARY, "o"),
+        ("Nearest example", SECONDARY, "s"),
+        ("Residue category", GRAY, "^"),
+        ("Scalar sensitivity", BLACK, "x"),
+        ("Shuffled pairing", LIGHT, "D"),
+    )
+    panels = (
+        (
+            "parameter_influence",
+            "Parameter influence",
+            "Squared local susceptibility",
+            "Direct parameter gradient",
+        ),
+        (
+            "feature_localization",
+            "Neuron localization",
+            "Absolute masked-margin change",
+            "Activation attribution",
+        ),
+    )
+    fig, axes = plt.subplots(1, 2, figsize=(9.0, 2.9))
+    for axis, (application, title, ylabel, reference) in zip(axes, panels):
+        counts = sorted(
+            {
+                row["selected_groups"]
+                for row in rows
+                if row["application"] == application
+            }
+        )
+        x = np.arange(len(counts))
+        for method, color, marker in methods + ((reference, "#C53D43", "P"),):
+            selected = sorted(
+                [
+                    row
+                    for row in rows
+                    if row["application"] == application and row["method"] == method
+                ],
+                key=lambda row: row["selected_groups"],
+            )
+            means = np.asarray([row["mean"] for row in selected])
+            axis.errorbar(
+                x,
+                means,
+                yerr=(
+                    means - np.asarray([row["ci95_low"] for row in selected]),
+                    np.asarray([row["ci95_high"] for row in selected]) - means,
+                ),
+                color=color,
+                marker=marker,
+                linewidth=1.35,
+                markersize=4,
+                capsize=2,
+                label=method,
+            )
+        kpsa = sorted(
+            [
+                row
+                for row in rows
+                if row["application"] == application and row["method"] == "KPSA"
+            ],
+            key=lambda row: row["selected_groups"],
+        )
+        for location, row in zip(x, kpsa):
+            horizontal_offset = 8 if location == 0 else 0
+            axis.annotate(
+                f"{100 * row['gap_recovered']:.0f}% gap",
+                (location, row["mean"]),
+                xytext=(horizontal_offset, 8),
+                textcoords="offset points",
+                ha="center",
+                fontsize=6.5,
+                color=PRIMARY,
+            )
+        axis.set_xticks(x, counts)
+        axis.set_xlabel("Selected ESM2 FF feature groups")
+        axis.set_ylabel(ylabel)
+        axis.set_title(title, fontsize=8)
+        axis.grid(axis="y", color="#E5E5E5", linewidth=0.6)
+    outside_legend(fig, axes, ncol=7, fontsize=5.5)
+    save_plot(fig, output)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--arc", type=Path, required=True)
@@ -2224,6 +2364,18 @@ def main():
         / "artifacts"
         / "timeseries"
         / "timeseries_cross_dataset_summary.json"
+    )
+    protein_feature_path = (
+        strengthening_arc
+        / "artifacts"
+        / "protein"
+        / "esm2_t12_feature_localization_causal_n1600_frozen_confirmation.json"
+    )
+    protein_influence_path = (
+        strengthening_arc
+        / "artifacts"
+        / "protein"
+        / "esm2_t12_parameter_influence_causal_n1600_frozen_confirmation.json"
     )
     output = args.output.resolve()
     if output.exists():
@@ -2432,6 +2584,19 @@ def main():
             timeseries_rows,
             output / "figures" / "timeseries_parameter_circuits",
         )
+    if protein_feature_path.exists() and protein_influence_path.exists():
+        protein_rows = build_protein_application_table(
+            protein_feature_path,
+            protein_influence_path,
+        )
+        write_csv(
+            output / "tables" / "protein_causal_applications.csv",
+            protein_rows,
+        )
+        plot_protein_applications(
+            protein_rows,
+            output / "figures" / "protein_causal_applications",
+        )
 
     strengthening_figures = (
         "parameter_influence_interpretability_imagenet1000",
@@ -2538,12 +2703,26 @@ def main():
         },
         {
             "candidate": "Time-series parameter influence circuits",
-            "status": "supported" if timeseries_summary_path.exists() else "not run",
+            "status": "supported secondary" if timeseries_summary_path.exists() else "not run",
             "gate": (
                 "Frozen Chronos-Bolt RBF circuit beats scalar and matched shuffle "
                 "on ETTh1 and Weather and recovers 31--67% of the direct-gradient gap"
                 if timeseries_summary_path.exists()
                 else "Cross-dataset confirmation artifact unavailable"
+            ),
+        },
+        {
+            "candidate": "Protein neuron localization and parameter influence",
+            "status": (
+                "supported primary"
+                if protein_feature_path.exists() and protein_influence_path.exists()
+                else "not run"
+            ),
+            "gate": (
+                "One frozen ESM2 atlas passes exact causal gates for both "
+                "applications on disjoint confirmations"
+                if protein_feature_path.exists() and protein_influence_path.exists()
+                else "Frozen confirmation artifacts unavailable"
             ),
         },
         {
@@ -2619,6 +2798,8 @@ def main():
         backend_screen_path,
         backend_causal_path,
         timeseries_summary_path,
+        protein_feature_path,
+        protein_influence_path,
     ):
         if path.exists():
             source_paths.append(path)
