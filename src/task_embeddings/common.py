@@ -28,7 +28,7 @@ def arc_artifact_dir(
     project_root: Path = PROJECT_ROOT,
 ) -> Path:
     """Resolve generated artifacts into the private sibling repository."""
-    internal_root = project_root.with_name(f"{project_root.name}_internal")
+    internal_root = project_root.with_name(f"{project_root.name}-internal")
     path = internal_root / arc / "artifacts"
     return path / setting if setting else path
 

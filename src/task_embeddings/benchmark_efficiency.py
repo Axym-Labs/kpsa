@@ -241,7 +241,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--project-root",
-        default=str(PROJECT_ROOT.with_name("task_embeddings_internal")),
+        default=str(PROJECT_ROOT.with_name("kpsa-internal")),
     )
     return parser.parse_args()
 

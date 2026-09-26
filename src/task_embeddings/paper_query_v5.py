@@ -228,7 +228,7 @@ def main() -> None:
         type=Path,
         default=(
             Path(__file__).resolve().parents[3]
-            / "task-embeddings-paper-internal"
+            / "kpsa-paper-internal"
             / "01_empirical"
             / "artifacts"
             / "query"

@@ -52,14 +52,14 @@ def _output_path(experiment: str, profile: str, seed: int, order: str | None) ->
     if profile == "paper":
         root = (
             PROJECT_ROOT.parent
-            / "task-embeddings-paper-internal"
+            / "kpsa-paper-internal"
             / "01_empirical"
             / "artifacts"
         )
     else:
         root = (
             PROJECT_ROOT.parent
-            / "task_embeddings_internal"
+            / "kpsa-internal"
             / "04_queryable_mechanisms"
             / "artifacts"
         )

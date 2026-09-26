@@ -172,7 +172,7 @@ class RunnerTests(unittest.TestCase):
         )
 
         self.assertIn("04_queryable_mechanisms", str(explore.output))
-        self.assertIn("task-embeddings-paper-internal", str(paper.output))
+        self.assertIn("kpsa-paper-internal", str(paper.output))
 
     def test_execute_plan_records_profile_and_writes_result(self):
         with tempfile.TemporaryDirectory() as directory:

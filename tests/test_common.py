@@ -106,12 +106,12 @@ class CommonTests(unittest.TestCase):
         torch.testing.assert_close(normalized_rows(x), torch.tensor([[0.6, 0.8]]))
 
     def test_arc_artifacts_resolve_to_internal_sibling(self):
-        project = Path("/tmp/workspace/task_embeddings")
+        project = Path("/tmp/workspace/kpsa")
         got = arc_artifact_dir("02_exploratory", "controlled", project_root=project)
         self.assertEqual(
             got,
             Path(
-                "/tmp/workspace/task_embeddings_internal/02_exploratory/artifacts/controlled"
+                "/tmp/workspace/kpsa-internal/02_exploratory/artifacts/controlled"
             ),
         )
 

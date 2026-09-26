@@ -1,20 +1,20 @@
-# Task-space neuronal embeddings
+# KPSA: Kernelized Parameter-Sensitivity Atlas
 
 This is the reusable codebase for experiments on compact, queryable
-parameter-group sensitivity. The active framework represents each group's
-raw or group-normalized squared-gradient sensitivity distribution with a
-kernel mean embedding over a shared sample representation. Private task
+parameter-group sensitivity atlases. KPSA represents each group's raw or
+group-normalized squared-gradient sensitivity distribution with a kernel mean
+embedding over an explicit query space. Private task
 specifications, checkpoints, metrics, reports, and figures live in the sibling directory
-[`../task_embeddings_internal`](../task_embeddings_internal/README.md).
+[`../kpsa-internal`](../kpsa-internal/README.md).
 
 The current arc is
-[`../task_embeddings_internal/06_strenghening`](../task_embeddings_internal/06_strenghening/kernelized_parameter_group_sensitivity_v8.md).
+[`../kpsa-internal/06_strenghening`](../kpsa-internal/06_strenghening/kernelized_parameter_group_sensitivity_v8.md).
 Its first implementation milestone provides an exact empirical RBF reference,
 a common finite-feature interface, linear and k-means++ Nyström maps, and
 discrete raw-versus-normalized sensitivity weights. The retained ImageNet
 ViT-B result has been rerun through this interface before new application
 search begins.
-Only empirical sections and appendices belong in `../task-embeddings-paper/`.
+Only empirical sections and appendices belong in `../kpsa-paper/`.
 
 The retained v3 study tested one module atlas across source-object compression,
 causal interpretation, structured pruning, and continual-learning protection
@@ -42,8 +42,8 @@ the applications: including the task-feature table, the natural TBE index is
 full-atlas benefit in the downstream summaries. This does not imply universal
 compute savings, and matched-dimensional JL has the same footprint. These
 are historical v4 conclusions, not the verdict of the active domain studies. See the
-[repair report](../task_embeddings_internal/03_exploratory/artifacts/report.pdf)
-and [machine-readable aggregate](../task_embeddings_internal/03_exploratory/artifacts/aggregate_metrics.json).
+[repair report](../kpsa-internal/03_exploratory/artifacts/report.pdf)
+and [machine-readable aggregate](../kpsa-internal/03_exploratory/artifacts/aggregate_metrics.json).
 
 ## Layout
 
@@ -93,7 +93,7 @@ The recorded environment is Python 3.12 with PyTorch 2.13.0+cu130 on one RTX
 5090. Dependencies are listed in `requirements-lock.txt`.
 
 ```bash
-cd /home/davwis/main/workspace/task_embeddings
+cd /home/davwis/main/workspace/kpsa
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m unittest discover -s tests -v
 ```
 
@@ -111,7 +111,7 @@ checkpoint. `--task-mode single` pools the same domain batches; it does not
 change the data to an easier one-domain problem.
 
 ```bash
-TASK_DATA=../task_embeddings_internal/04_queryable_mechanisms/artifacts/domain_medium/data
+TASK_DATA=../kpsa-internal/04_queryable_mechanisms/artifacts/domain_medium/data
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
   optimizer --profile explore --seed 11 --data "$TASK_DATA" --method adamw
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
@@ -119,7 +119,7 @@ PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.
   --method tbe --partition swiglu --score-link log --task-mode multi
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
   domain_applications --profile explore --seed 11 --data "$TASK_DATA" \
-  --checkpoint ../task_embeddings_internal/04_queryable_mechanisms/artifacts/domain_medium/adamw_medium_dev.pt \
+  --checkpoint ../kpsa-internal/04_queryable_mechanisms/artifacts/domain_medium/adamw_medium_dev.pt \
   --feature-file token_features.pt
 ```
 
@@ -167,7 +167,7 @@ These native scaling paths remain exploratory; they do not implement pruning.
 Retained debugging/archival paths:
 
 ```bash
-CHECKPOINT=../task_embeddings_internal/03_exploratory/artifacts/controlled/controlled_v4_premise_seed2.pt
+CHECKPOINT=../kpsa-internal/03_exploratory/artifacts/controlled/controlled_v4_premise_seed2.pt
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
   optimizer_recovery --profile explore --seed 2 --checkpoint "$CHECKPOINT"
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
@@ -176,8 +176,8 @@ PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.
   continual --profile explore --seed 2 --order forward
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
   language_inference_control --profile explore --seed 1 \
-  --checkpoint ../task_embeddings_internal/02_exploratory/artifacts/language/language_v3_seed1.pt \
-  --profiles ../task_embeddings_internal/02_exploratory/artifacts/language/language_v3_embeddings_seed1.npz
+  --checkpoint ../kpsa-internal/02_exploratory/artifacts/language/language_v3_seed1.pt \
+  --profiles ../kpsa-internal/02_exploratory/artifacts/language/language_v3_embeddings_seed1.npz
 ```
 
 The controlled Transformer is a premise/debugging environment, not a
@@ -191,7 +191,7 @@ Run the repaired controlled experiments and aggregation:
 for seed in 2 3 4; do
   PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.controlled_v4 --seed "$seed"
   PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.controlled_assay_v4 \
-    --checkpoint "../task_embeddings_internal/03_exploratory/artifacts/controlled/controlled_v4_premise_seed${seed}.pt" \
+    --checkpoint "../kpsa-internal/03_exploratory/artifacts/controlled/controlled_v4_premise_seed${seed}.pt" \
     --seed "$seed"
 done
 for seed in 1 2 3; do
@@ -219,8 +219,8 @@ The vision path enforces deterministic CUDA execution and freezes only the
 DINOv2 positional-embedding tensor because its bicubic interpolation backward
 has no deterministic CUDA implementation.
 
-V3 defaults resolve to `../task_embeddings_internal/02_exploratory/artifacts/`;
-V4 defaults resolve to `../task_embeddings_internal/03_exploratory/artifacts/`.
+V3 defaults resolve to `../kpsa-internal/02_exploratory/artifacts/`;
+V4 defaults resolve to `../kpsa-internal/03_exploratory/artifacts/`.
 Experiment artifacts are deliberately not written into this reusable codebase.
 The retained seed-1 natural checkpoints are development attempts and are not
 included in confirmatory uncertainty estimates.

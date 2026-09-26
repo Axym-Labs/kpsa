@@ -448,7 +448,7 @@ reopening the atlas-compression question; additional model scale would not.
 
 ## Reproduction and artifacts
 
-Run from `/home/davwis/main/workspace/task_embeddings`:
+Run from `/home/davwis/main/workspace/kpsa`:
 
 ```bash
 PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m unittest discover -s tests -v
