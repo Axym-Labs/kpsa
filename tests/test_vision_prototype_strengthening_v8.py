@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from task_embeddings.vision_prototype_strengthening_v8 import (
+from kpsa.vision_prototype_strengthening_v8 import (
     construction_indices,
     source_rebuild_indices,
 )

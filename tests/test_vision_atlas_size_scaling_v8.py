@@ -1,6 +1,6 @@
 import torch
 
-from task_embeddings.vision_atlas_size_scaling_v8 import (
+from kpsa.vision_atlas_size_scaling_v8 import (
     balanced_pairing_permutation,
     offset_major_indices,
     select_default,

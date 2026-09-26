@@ -1,6 +1,6 @@
 import unittest
 
-from task_embeddings.vision_family_refined import adaptive_family_ids
+from kpsa.vision_family_refined import adaptive_family_ids
 
 
 class VisionFamilyRefinedTest(unittest.TestCase):

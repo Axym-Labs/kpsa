@@ -3,10 +3,10 @@ import unittest
 import torch
 from torch import nn
 
-from task_embeddings.domain_optimizer import ParameterPartition
+from kpsa.parameter_groups import ParameterPartition
 
 try:
-    from task_embeddings.vision_sensitivity_refined import (
+    from kpsa.vision_sensitivity_refined import (
         profile_class_sensitivity,
         run_vision_profiles,
     )
@@ -14,7 +14,7 @@ except ModuleNotFoundError:
     profile_class_sensitivity = None
     run_vision_profiles = None
 except ImportError:
-    from task_embeddings.vision_sensitivity_refined import profile_class_sensitivity
+    from kpsa.vision_sensitivity_refined import profile_class_sensitivity
 
     run_vision_profiles = None
 

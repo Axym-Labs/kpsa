@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 
-from task_embeddings.domain_optimizer import ParameterPartition
-from task_embeddings.parameter_influence_circuits_v8 import (
+from kpsa.parameter_groups import ParameterPartition
+from kpsa.parameter_influence_circuits_v8 import (
     additive_group_noise,
     scoped_parameter_rms,
 )

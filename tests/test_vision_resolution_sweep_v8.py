@@ -1,9 +1,9 @@
 import torch
 from torch import nn
 
-from task_embeddings.domain_optimizer import ParameterPartition
-from task_embeddings.vision_causal_refined import mlp_feature_layout
-from task_embeddings.vision_resolution_sweep_v8 import (
+from kpsa.parameter_groups import ParameterPartition
+from kpsa.vision_causal_refined import mlp_feature_layout
+from kpsa.vision_resolution_sweep_v8 import (
     aggregate_groups,
     expand_selection,
     nested_feature_assignment,

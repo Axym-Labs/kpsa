@@ -2,7 +2,7 @@ import unittest
 
 import torch
 
-from task_embeddings.kernel_sensitivity import (
+from kpsa.kernel_sensitivity import (
     LinearKernelMap,
     fit_anchor_nystrom_rbf,
     fit_empirical_rbf_index,

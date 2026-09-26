@@ -3,8 +3,8 @@ import unittest
 import torch
 from torch import nn
 
-from task_embeddings.domain_optimizer import ParameterPartition
-from task_embeddings.vision_causal_refined import (
+from kpsa.parameter_groups import ParameterPartition
+from kpsa.vision_causal_refined import (
     mean_ablate_groups,
     mean_ablate_mlp_activations,
     mean_ablation_taylor,

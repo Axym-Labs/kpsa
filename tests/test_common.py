@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import torch
 
-from task_embeddings.common import (
+from kpsa.common import (
     OnlineAccumulator,
     accelerator_peak_memory,
     arc_artifact_dir,
@@ -32,7 +32,7 @@ class CommonTests(unittest.TestCase):
             save_json(target, {"step": 1})
             previous = target.read_text()
             with (
-                patch("task_embeddings.common.os.replace", side_effect=OSError),
+                patch("kpsa.common.os.replace", side_effect=OSError),
                 self.assertRaises(OSError),
             ):
                 save_json(target, {"step": 2})

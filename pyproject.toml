@@ -1,7 +1,7 @@
 [project]
-name = "task-space-neuronal-embeddings"
+name = "kpsa"
 version = "0.1.0"
-description = "Task-space neuronal embedding experiments and analysis tools"
+description = "Kernelized Parameter-Sensitivity Atlas experiments and analysis tools"
 requires-python = ">=3.11"
 dependencies = [
   "numpy",
@@ -9,13 +9,10 @@ dependencies = [
   "torch",
   "torchvision",
   "transformers",
-  "datasets",
   "scikit-learn",
   "pandas",
   "matplotlib",
-  "sacrebleu",
-  "bitsandbytes",
-  "adam-mini==1.1.1",
+  "timm",
 ]
 
 [project.optional-dependencies]

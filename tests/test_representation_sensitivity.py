@@ -3,13 +3,14 @@ import unittest
 import torch
 from torch import nn
 
-from task_embeddings.domain_optimizer import ParameterPartition
+from kpsa.parameter_groups import ParameterPartition
 
 try:
-    from task_embeddings.representation_sensitivity import (
+    from kpsa.representation_sensitivity import (
         SensitivityAtlasAccumulator,
         coarsen_atlas,
         coarsen_profiles,
+        cold_fold_predictions,
         group_relative_shares,
         sensitivity_weights,
     )
@@ -19,9 +20,10 @@ except ModuleNotFoundError:
     coarsen_profiles = None
     group_relative_shares = None
     sensitivity_weights = None
+    cold_fold_predictions = None
 
 try:
-    from task_embeddings.representation_sensitivity import (
+    from kpsa.representation_sensitivity import (
         partition_gradient_energy,
         profile_ranking_metrics,
         query_atlas,
@@ -33,6 +35,28 @@ except ImportError:
 
 
 class RepresentationSensitivityTest(unittest.TestCase):
+    def test_cold_predictions_do_not_read_heldout_profile_columns(self):
+        profiles = torch.arange(32, dtype=torch.float64).reshape(4, 8) + 1
+        features = torch.arange(16, dtype=torch.float64).reshape(8, 2) + 1
+        changed = profiles.clone()
+        changed[:, 0::4] = 1_000_000
+
+        original = cold_fold_predictions(profiles, features, seed=5)
+        modified = cold_fold_predictions(changed, features, seed=5)
+
+        for method in (
+            "semantic",
+            "affine_semantic",
+            "rbf_semantic",
+            "scalar_mass",
+            "jl",
+            "permuted",
+            "nearest",
+        ):
+            torch.testing.assert_close(
+                original[method][:, 0::4], modified[method][:, 0::4]
+            )
+
     def test_coarsen_profiles_preserves_each_normalized_query(self):
         profiles = torch.tensor([[0.1, 0.2], [0.3, 0.1], [0.6, 0.7]])
         coarse = coarsen_profiles(profiles, torch.tensor([0, 0, 1]))

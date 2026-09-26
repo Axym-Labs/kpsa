@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from task_embeddings.protein_neuron_localization_v8 import EsmSensitivity
+from kpsa.protein_neuron_localization_v8 import EsmSensitivity
 
 
 def toy_experiment():

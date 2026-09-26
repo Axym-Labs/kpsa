@@ -1,7 +1,7 @@
 import unittest
 
 try:
-    from task_embeddings.refined_analysis import (
+    from kpsa.refined_analysis import (
         paired_t_summary,
         summarize_precision_records,
     )
@@ -9,7 +9,7 @@ except ModuleNotFoundError:
     paired_t_summary = None
     summarize_precision_records = None
 except ImportError:
-    from task_embeddings.refined_analysis import paired_t_summary
+    from kpsa.refined_analysis import paired_t_summary
 
     summarize_precision_records = None
 

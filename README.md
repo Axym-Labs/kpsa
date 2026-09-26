@@ -1,226 +1,87 @@
 # KPSA: Kernelized Parameter-Sensitivity Atlas
 
-This is the reusable codebase for experiments on compact, queryable
-parameter-group sensitivity atlases. KPSA represents each group's raw or
-group-normalized squared-gradient sensitivity distribution with a kernel mean
-embedding over an explicit query space. Private task
-specifications, checkpoints, metrics, reports, and figures live in the sibling directory
-[`../kpsa-internal`](../kpsa-internal/README.md).
+KPSA stores a compact, queryable summary of how parameter groups respond to
+inputs. For each group, it forms a kernel mean embedding of an input-space
+distribution weighted by squared parameter-gradient sensitivity. A frozen
+atlas can then retrieve input-conditioned parameter groups without running a
+new backward pass for every query.
 
-The current arc is
-[`../kpsa-internal/06_strenghening`](../kpsa-internal/06_strenghening/kernelized_parameter_group_sensitivity_v8.md).
-Its first implementation milestone provides an exact empirical RBF reference,
-a common finite-feature interface, linear and k-means++ Nyström maps, and
-discrete raw-versus-normalized sensitivity weights. The retained ImageNet
-ViT-B result has been rerun through this interface before new application
-search begins.
-Only empirical sections and appendices belong in `../kpsa-paper/`.
+This repository is the lean experiment supplement for the current paper. It
+contains the estimator, the retained vision, forecasting, and protein
+experiments, causal interventions, analysis code, and the result-bundle
+generator. Historical experiments remain available in Git history; private
+specifications, datasets, checkpoints, and result artifacts live in the
+sibling `kpsa-internal` repository.
 
-The retained v3 study tested one module atlas across source-object compression,
-causal interpretation, structured pruning, and continual-learning protection
-in three settings:
+## Evidence in the supplement
 
-- a controlled decoder-only Transformer with known latent task geometry;
-- a pretrained DINOv2 ViT on CIFAR-100 (documented fallback because the
-  requested DINOv3 checkpoint is access-gated);
-- full-parameter Qwen3-1.7B on six heterogeneous instruction tasks.
+The retained code supports two applications:
 
-The v3 blanket **no-go is withdrawn**. Its global-geometry metrics, causal assay,
-pruning operating points, and continual-learning protocol contained confounds
-that prevented a fair method comparison. The v4 repair adds cross-fitted task
-queries, premise-gated necessity/sufficiency curves, a planted positive control,
-and genuine seen-only sequential continual learning. The corrected result is
-bounded: the Task-Basis Embedding (TBE) helps held-out querying in the positive
-control and against matched JL in the naturally trained controlled model, and
-residual-normalized TBE enables the controlled applications. It has no
-demonstrated downstream advantage over the full residual-normalized OPG atlas
-or several alternatives; in the natural model,
-task-agnostic and permuted-task-basis rankings also recover almost all of the
-held-out query signal. Its controlled value is instead compact utility across
-the applications: including the task-feature table, the natural TBE index is
-4.90x smaller than the full atlas while retaining about 96--97% of the
-full-atlas benefit in the downstream summaries. This does not imply universal
-compute savings, and matched-dimensional JL has the same footprint. These
-are historical v4 conclusions, not the verdict of the active domain studies. See the
-[repair report](../kpsa-internal/03_exploratory/artifacts/report.pdf)
-and [machine-readable aggregate](../kpsa-internal/03_exploratory/artifacts/aggregate_metrics.json).
+1. **Input-conditioned localization.** KPSA predicts parameter groups with high
+   per-query sensitivity and evaluates them with exact activation ablations.
+2. **Input-conditioned parameter-influence circuits.** KPSA retrieves groups
+   whose direct parameter perturbation changes the requested output, then tests
+   the resulting circuits with causal interventions and interpretability
+   controls.
+
+The experiments cover pretrained vision transformers, a pretrained time-series
+foundation model, and a pretrained protein transformer. The result bundle also
+contains space, kernel, compression, normalization, resolution, atlas-size,
+and cost-accuracy ablations used to delimit the claims.
 
 ## Layout
 
-- `src/task_embeddings/experiment_core.py`: canonical estimator,
-  representation, application, and run-profile vocabulary;
-- `src/task_embeddings/kernel_sensitivity.py`: exact and finite-dimensional
-  kernel mean sensitivity indices, including the default k-means++ Nyström map;
-- `src/task_embeddings/representation_sensitivity.py`: raw/normalized
-  sensitivity weights, streaming sufficient statistics, exact coarsening, and
-  retrieval metrics;
-- `src/task_embeddings/runner.py`: common `explore`/`paper` experiment entry
-  point and output routing;
-- `src/task_embeddings/domain_{data,train,optimizer}.py`: reproducible real
-  corpora, true scratch training, implicit parameter partitions, and online
-  task sketches (no dense parameter-to-group ID arrays);
-- `src/task_embeddings/domain_applications.py`: cross-fitted attribution,
-  perturbation sensitivity, parameter-budgeted sparsification, and mixed
-  precision allocation, with common EF/normalized-OPG/Fisher controls;
-- `src/task_embeddings/domain_{campaign,analysis}.py`: resumable finite
-  development grids and model-clustered uncertainty; repeated task queries
-  are not counted as independent model seeds;
-- `src/task_embeddings/domain_continual.py`: sequential domain adaptation,
-  parameter-diagonal and exact grouped EWC, acquisition/forgetting curves;
-- `src/task_embeddings/domain_scaling.py`: bounded, continuous language-indexed
-  SwiGLU scaling on an intact pretrained model. No binary masks or recovery
-  metric; full/TBE/JL and task-agnostic controls share the intervention budget.
-  This is a validation-only premise test, not established application utility;
-- `src/task_embeddings/importance.py`: shared raw/residual-normalized OPG by
-  full-atlas/TBE/JL/mean comparison grid;
-- `src/task_embeddings/{inference_control,optimizer_experiment,task_optimizer}.py`:
-  archival binary feature-masking and checkpoint-recovery optimizer tests;
-- `src/task_embeddings/language_inference_control.py`: disjoint-example
-  archival Qwen3 feature-masking check using retained profile archives;
-- `src/task_embeddings/common.py`: balanced atlases, sketches, fidelity, and
-  shared accumulators;
-- `src/task_embeddings/applications.py`: common application metrics;
-- `src/task_embeddings/*_v3.py`: archival v3 experiment paths;
-- `src/task_embeddings/{controlled,controlled_assay,planted,continual,analysis}_v4.py`:
-  repaired premise-gated controlled paths;
-- `src/task_embeddings/{controlled,vision,language}.py`: retained v1 study
-  implementations;
-- `tests/`: deterministic unit and tiny end-to-end checks.
+- `src/kpsa/kernel_sensitivity.py`: exact and finite-dimensional kernel maps.
+- `src/kpsa/representation_sensitivity.py`: atlas statistics, cold-query
+  retrieval, coarsening, and ranking metrics.
+- `src/kpsa/parameter_groups.py`: complete parameter partitions used by the
+  experiments.
+- `src/kpsa/vision_*_v8.py` and `src/kpsa/imagenet1k_*_v8.py`: retained vision
+  confirmations and design ablations.
+- `src/kpsa/timeseries_parameter_influence_v8.py`: forecasting confirmation.
+- `src/kpsa/protein_neuron_localization_v8.py`: protein localization and
+  parameter-influence confirmation.
+- `src/kpsa/parameter_influence_*_v8.py`: causal and interpretability analyses.
+- `src/kpsa/positive_evidence_bundle.py`: reproducible tables, figures,
+  captions, source-result manifest, and ZIP archive.
+- `tests/`: focused unit tests for the retained paper code.
 
-## Environment and tests
+## Environment and verification
 
 The recorded environment is Python 3.12 with PyTorch 2.13.0+cu130 on one RTX
-5090. Dependencies are listed in `requirements-lock.txt`.
+5090. Install the locked environment or the package with its optional
+forecasting dependency:
 
 ```bash
-cd /home/davwis/main/workspace/kpsa
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m unittest discover -s tests -v
+python -m pip install -e '.[timeseries]'
 ```
 
-Smoke-test all v3 settings:
+Run the focused supplement tests and lint checks:
 
 ```bash
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.controlled_v3 --smoke
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.vision_v3 --smoke
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.language_v3 --smoke
+PYTHONPATH=src python -m pytest -q
+python -m ruff check src tests
 ```
 
-Run the active unified paths (`paper` increases the budget, but never certifies
-that validity or uncertainty gates passed). Scratch optimization rejects a
-checkpoint. `--task-mode single` pools the same domain batches; it does not
-change the data to an easier one-domain problem.
+## Regenerating the result bundle
+
+The bundle generator consumes the recorded metric files from the private
+empirical repositories and performs no model inference:
 
 ```bash
-TASK_DATA=../kpsa-internal/04_queryable_mechanisms/artifacts/domain_medium/data
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  optimizer --profile explore --seed 11 --data "$TASK_DATA" --method adamw
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  optimizer --profile paper --seed 21 --data "$TASK_DATA" \
-  --method tbe --partition swiglu --score-link log --task-mode multi
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  domain_applications --profile explore --seed 11 --data "$TASK_DATA" \
-  --checkpoint ../kpsa-internal/04_queryable_mechanisms/artifacts/domain_medium/adamw_medium_dev.pt \
-  --feature-file token_features.pt
+PYTHONPATH=src python -m kpsa.positive_evidence_bundle \
+  --arc ../kpsa-internal/05_refined_scope \
+  --strengthening-arc ../kpsa-internal/06_strenghening \
+  --output ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results \
+  --zip ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results_2026-09-26.zip
 ```
 
-Use `--role test` only after freezing choices on validation data. The optional
-log-score variant enforces positive reconstructed scores and is reported
-separately from linear TBE. Optimizer batch-gradient second moments are **not**
-per-example EF. In application profiling, one corpus row is one example.
-The older `inference_control` and `language_inference_control` paths below are
-archival **task-conditioned pruning** experiments, not continuous scaling.
-They do not satisfy the continuous-scaling application requirement.
-
-Masked weights and simulated quantization measure quality at an intervention
-budget, not deployed kernel speed. Importance-index savings, total optimizer
-state, peak allocation, and wall time are different quantities.
-
-The matched-Adafactor diagnostic uses `mean_adafactor`, `full_adafactor`,
-`tbe_adafactor`, and `jl_adafactor`: Adafactor-style parameter scaling, update
-clipping and time-dependent second-moment decay, with only the variance
-representation changed. It currently requires raw arithmetic second moments.
-`optimizer_adafactor_kernel_screen()` is a bounded row-only validation screen;
-it does not automatically launch medium confirmation.
-
-The active optimizer also accepts `mean_nomomentum`, `full_nomomentum`,
-`tbe_nomomentum`, and `jl_nomomentum`. These set the first-moment coefficient
-to zero **without allocating a momentum tensor**; all other grouped-update
-mechanics are unchanged. A single task uses one coefficient per group, with
-no redundant task-feature slope. Group-size metadata is included in measured
-state. The finite momentum-free campaign uses arithmetic (not log) second
-moments, validation-only selection, and separate output paths; it does not
-replace the earlier Adam-like runs. For example, use `--method mean_nomomentum
---task-mode single --score-link linear` in the optimizer command above.
-
-Use `--skip-pruning` with `domain_applications` to evaluate precision allocation
-without rerunning sparsification. Budget selection is ranked first-fit: groups
-that do not fit are skipped, and actual parameter fractions are recorded.
-`--method adamw8bit` adds the quantized-moment baseline to the same scratch path.
-`--method adammini` uses the authors' Adam-mini 1.1.1 implementation, with their
-short-run whole-value-tensor setting and weight decay matched on all parameters.
-For continuous interventions, `domain_scaling --coordinate gate` profiles the
-actual multiplier sensitivities; the default `parameter` coordinate uses mean
-parameter OPG. `domain_scaling --translation` measures generated translation
-quality with source-conditioned calibration, not just language-model loss.
-These native scaling paths remain exploratory; they do not implement pruning.
-
-Retained debugging/archival paths:
+Key experiment modules expose their full configuration through `--help`:
 
 ```bash
-CHECKPOINT=../kpsa-internal/03_exploratory/artifacts/controlled/controlled_v4_premise_seed2.pt
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  optimizer_recovery --profile explore --seed 2 --checkpoint "$CHECKPOINT"
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  inference_control --profile explore --seed 2 --checkpoint "$CHECKPOINT"
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  continual --profile explore --seed 2 --order forward
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.runner \
-  language_inference_control --profile explore --seed 1 \
-  --checkpoint ../kpsa-internal/02_exploratory/artifacts/language/language_v3_seed1.pt \
-  --profiles ../kpsa-internal/02_exploratory/artifacts/language/language_v3_embeddings_seed1.npz
+PYTHONPATH=src python -m kpsa.imagenet1k_parameter_influence_confirmation_v8 --help
+PYTHONPATH=src python -m kpsa.timeseries_parameter_influence_v8 --help
+PYTHONPATH=src python -m kpsa.protein_neuron_localization_v8 --help
 ```
 
-The controlled Transformer is a premise/debugging environment, not a
-paper-ready model. The shared SwiGLU feature-gating and optimizer group mapping
-also support the retained Qwen3 wrapper; promotion of the two new applications
-requires the modern pretrained-model profile and independent final data.
-
-Run the repaired controlled experiments and aggregation:
-
-```bash
-for seed in 2 3 4; do
-  PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.controlled_v4 --seed "$seed"
-  PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.controlled_assay_v4 \
-    --checkpoint "../kpsa-internal/03_exploratory/artifacts/controlled/controlled_v4_premise_seed${seed}.pt" \
-    --seed "$seed"
-done
-for seed in 1 2 3; do
-  PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.planted_v4 --seed "$seed"
-done
-for order in forward reverse; do
-  for seed in 1 2 3; do
-    PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.continual_v4 --seed "$seed" --full --order "$order"
-  done
-done
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.analysis_v4
-```
-
-Run and regenerate the complete retained study:
-
-```bash
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.controlled_v3
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.vision_v3
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.language_v3
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.analysis_v3
-PYTHONPATH=src /home/davwis/main/venvs/vllm-nvfp4/bin/python -m task_embeddings.report_v3
-```
-
-The vision path enforces deterministic CUDA execution and freezes only the
-DINOv2 positional-embedding tensor because its bicubic interpolation backward
-has no deterministic CUDA implementation.
-
-V3 defaults resolve to `../kpsa-internal/02_exploratory/artifacts/`;
-V4 defaults resolve to `../kpsa-internal/03_exploratory/artifacts/`.
-Experiment artifacts are deliberately not written into this reusable codebase.
-The retained seed-1 natural checkpoints are development attempts and are not
-included in confirmatory uncertainty estimates.
+Experiment outputs are deliberately written outside this public codebase.
