@@ -1,0 +1,16 @@
+# Verified experiment environment (Python 3.12, CUDA 13.0 build of PyTorch).
+torch==2.13.0
+torchvision==0.28.0
+transformers==5.12.1
+datasets==5.0.1
+scikit-learn==1.9.0
+scipy==1.18.0
+pandas==3.0.5
+numpy==2.3.5
+Pillow==12.3.0
+sentencepiece==0.2.2
+sacrebleu==2.6.0
+bitsandbytes==0.50.2
+
+# Figures were rendered with the workspace base Python environment.
+matplotlib==3.11.0

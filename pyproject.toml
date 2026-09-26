@@ -1,0 +1,25 @@
+[project]
+name = "task-space-neuronal-embeddings"
+version = "0.1.0"
+description = "Task-space neuronal embedding experiments and analysis tools"
+requires-python = ">=3.11"
+dependencies = [
+  "numpy",
+  "scipy",
+  "torch",
+  "torchvision",
+  "transformers",
+  "datasets",
+  "scikit-learn",
+  "pandas",
+  "matplotlib",
+  "sacrebleu",
+  "bitsandbytes",
+  "adam-mini==1.1.1",
+]
+
+[project.optional-dependencies]
+timeseries = ["chronos-forecasting==2.2.2"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
