@@ -10,7 +10,7 @@ This repository is the lean experiment supplement for the current paper.
 
 ## Evidence in the supplement
 
-We use the method in two application:
+We use the method in two applications:
 
 1. **Input-conditioned localization.** KPSA predicts parameter groups with high
    per-query sensitivity and evaluates them with exact activation ablations.
@@ -34,6 +34,8 @@ and cost-accuracy ablations used to delimit the claims.
 - `src/kpsa/vision_*_v8.py` and `src/kpsa/imagenet1k_*_v8.py`: retained vision
   confirmations and design ablations.
 - `src/kpsa/timeseries_parameter_influence_v8.py`: forecasting confirmation.
+- `src/kpsa/semantic_circuit_evidence_v8.py`: matched vision/forecasting
+  circuit-structure and exact-intervention confirmation.
 - `src/kpsa/protein_neuron_localization_v8.py`: protein localization and
   parameter-influence confirmation.
 - `src/kpsa/parameter_influence_*_v8.py`: causal and interpretability analyses.
@@ -68,7 +70,7 @@ PYTHONPATH=src python -m kpsa.positive_evidence_bundle \
   --arc ../kpsa-internal/05_refined_scope \
   --strengthening-arc ../kpsa-internal/06_strenghening \
   --output ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results \
-  --zip ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results_2026-09-26.zip
+  --zip ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results_2026-09-27.zip
 ```
 
 Key experiment modules expose their full configuration through `--help`:
@@ -78,4 +80,3 @@ PYTHONPATH=src python -m kpsa.imagenet1k_parameter_influence_confirmation_v8 --h
 PYTHONPATH=src python -m kpsa.timeseries_parameter_influence_v8 --help
 PYTHONPATH=src python -m kpsa.protein_neuron_localization_v8 --help
 ```
-

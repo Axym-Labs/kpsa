@@ -51,11 +51,7 @@ def _paired(records, method, baseline, group_count, metric):
 
 def _gap_recovery(method, scalar, oracle):
     denominator = oracle["mean"] - scalar["mean"]
-    return (
-        (method["mean"] - scalar["mean"]) / denominator
-        if denominator > 0
-        else None
-    )
+    return (method["mean"] - scalar["mean"]) / denominator if denominator > 0 else None
 
 
 def run_confirmation(
@@ -67,6 +63,7 @@ def run_confirmation(
     directions: int,
     noise_scale: float,
     target_offset: int,
+    selected_groups: tuple[int, ...] = (8, 37),
 ):
     import timm
     from torchvision.datasets import ImageFolder
@@ -82,9 +79,11 @@ def run_confirmation(
     construction_indices = _indices_from_starts(class_starts, [43])
     target_indices = _indices_from_starts(class_starts, [target_offset])
 
-    encoder = AutoModel.from_pretrained(
-        "facebook/dinov2-small", local_files_only=True
-    ).cuda().eval()
+    encoder = (
+        AutoModel.from_pretrained("facebook/dinov2-small", local_files_only=True)
+        .cuda()
+        .eval()
+    )
     processor = AutoImageProcessor.from_pretrained(
         "facebook/dinov2-small", local_files_only=True
     )
@@ -112,9 +111,11 @@ def run_confirmation(
     gc.collect()
     torch.cuda.empty_cache()
 
-    model = timm.create_model(
-        "vit_base_patch16_224.augreg2_in21k_ft_in1k", pretrained=True
-    ).cuda().eval()
+    model = (
+        timm.create_model("vit_base_patch16_224.augreg2_in21k_ft_in1k", pretrained=True)
+        .cuda()
+        .eval()
+    )
     transform = timm.data.create_transform(
         **timm.data.resolve_model_data_config(model), is_training=False
     )
@@ -137,15 +138,11 @@ def run_confirmation(
     )
     prototype = _matrix_product(atlas, target_responses.T)
     prototype_permuted = _matrix_product(shuffled_atlas, target_responses.T)
-    class_mean = source_weights.reshape(
-        len(source_weights), per_class, classes
-    ).mean(1)
+    class_mean = source_weights.reshape(len(source_weights), per_class, classes).mean(1)
     class_kernel = class_mean / classes
     alpha = 0.25
     combined = (1 - alpha) * class_kernel + alpha * prototype
-    combined_permuted = (
-        (1 - alpha) * class_kernel + alpha * prototype_permuted
-    )
+    combined_permuted = (1 - alpha) * class_kernel + alpha * prototype_permuted
     cosine = source_features @ target_features.T
     methods = {
         "combined_class_prototype": combined,
@@ -176,10 +173,8 @@ def run_confirmation(
         intact = margin_values(model, images[:1], labels[:1]).cpu()
         target_correct = bool(intact[0] > 0)
         for method, scores in methods.items():
-            for group_count in (8, 37):
-                selected_local = torch.topk(
-                    scores[:, column], group_count
-                ).indices
+            for group_count in selected_groups:
+                selected_local = torch.topk(scores[:, column], group_count).indices
                 selected = torch.zeros(partition.n_groups, dtype=torch.bool)
                 selected[scope_indices[selected_local]] = True
                 coverage = float(target_weights[selected_local, column].sum())
@@ -206,9 +201,7 @@ def run_confirmation(
                             "same_class_squared_susceptibility": float(squared[1]),
                             "off_class_squared_susceptibility": float(squared[2]),
                             "off_class_selectivity": float(squared[0] - squared[2]),
-                            "within_class_selectivity": float(
-                                squared[0] - squared[1]
-                            ),
+                            "within_class_selectivity": float(squared[0] - squared[1]),
                         }
                     )
         print(
@@ -218,7 +211,7 @@ def run_confirmation(
 
     summaries = {}
     comparisons = {}
-    for group_count in (8, 37):
+    for group_count in selected_groups:
         key = str(group_count)
         summaries[key] = {}
         for method in methods:
@@ -287,7 +280,7 @@ def run_confirmation(
             "target_offset": target_offset,
             "causal_queries": len(query_columns),
             "directions_per_query_method_budget": directions,
-            "selected_groups": [8, 37],
+            "selected_groups": list(selected_groups),
             "combined_kernel": (
                 "0.75 * class-delta kernel + 0.25 * DINO prototype kernel"
             ),
@@ -326,6 +319,7 @@ def main():
     parser.add_argument("--directions", type=int, default=8)
     parser.add_argument("--noise-scale", type=float, default=0.03)
     parser.add_argument("--target-offset", type=int, default=46)
+    parser.add_argument("--selected-groups", type=int, nargs="+", default=[8, 37])
     args = parser.parse_args()
     seed_everything(314_159)
     run_confirmation(
@@ -336,6 +330,7 @@ def main():
         directions=args.directions,
         noise_scale=args.noise_scale,
         target_offset=args.target_offset,
+        selected_groups=tuple(args.selected_groups),
     )
 
 

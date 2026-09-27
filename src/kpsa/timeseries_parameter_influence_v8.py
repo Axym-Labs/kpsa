@@ -149,8 +149,28 @@ class ChronosSensitivity:
 
     @torch.no_grad()
     def functional(self, x: torch.Tensor) -> float:
-        functional, _ = self._forward_components(x)
-        return float(functional)
+        return float(self.functionals(x[None])[0])
+
+    @torch.no_grad()
+    def functionals(self, contexts: torch.Tensor) -> torch.Tensor:
+        """Evaluate the scalar forecasting functional for a context batch."""
+        contexts = contexts.to(self.device)
+        hidden, loc_scale, input_embeds, attention_mask = self.model.encode(contexts)
+        decoded = self.model.decode(input_embeds, attention_mask, hidden)
+        batch = len(contexts)
+        normalized = self.model.output_patch_embedding(decoded).view(
+            batch,
+            self.model.num_quantiles,
+            self.model.chronos_config.prediction_length,
+        )
+        prediction = self.model.instance_norm.inverse(
+            normalized.view(batch, -1), loc_scale
+        ).view_as(normalized)
+        median_index = int((self.model.quantiles.float() - 0.5).abs().argmin())
+        return (
+            prediction[:, median_index, : self.horizon].mean(dim=1)
+            - contexts[:, -1]
+        ).float().cpu()
 
     @torch.no_grad()
     def parameter_rms(self) -> float:

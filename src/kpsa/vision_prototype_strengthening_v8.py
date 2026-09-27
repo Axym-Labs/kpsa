@@ -128,9 +128,7 @@ def make_predictions(
                 feature_map,
                 weight_mode="normalized",
             )
-            predictions[name] = index.query(
-                target_features, mass_weighted=True
-            ).float()
+            predictions[name] = index.query(target_features, mass_weighted=True).float()
             predictions[name + "_permuted"] = permuted.query(
                 target_features, mass_weighted=True
             ).float()
@@ -153,7 +151,9 @@ def paired(records, method, baseline, fraction, metric="degradation"):
         and row["method"] == baseline
         and row["fraction"] == fraction
     }
-    return paired_t_summary([left[key] - right[key] for key in left.keys() & right.keys()])
+    return paired_t_summary(
+        [left[key] - right[key] for key in left.keys() & right.keys()]
+    )
 
 
 def run_study(
@@ -219,7 +219,9 @@ def run_study(
         if ablation == "mean"
         else {name: torch.zeros_like(value) for name, value in means.items()}
     )
-    query_columns = torch.linspace(0, len(target_indices) - 1, queries).round().long().unique()
+    query_columns = (
+        torch.linspace(0, len(target_indices) - 1, queries).round().long().unique()
+    )
     records = []
     started = time.perf_counter()
     for column in query_columns.tolist():
@@ -235,7 +237,9 @@ def run_study(
         same_image, same_label = dataset[same_index]
         same_label = int(same_label)
         if same_label != label:
-            raise RuntimeError("same-class companion crossed an ImageNet class boundary")
+            raise RuntimeError(
+                "same-class companion crossed an ImageNet class boundary"
+            )
         same_baseline = functional_value(model, same_image, same_label, "margin")
         same_prediction = int(model(same_image[None].to(partition.device)).argmax(1))
         taylor = mean_ablation_taylor_scores(
@@ -251,15 +255,15 @@ def run_study(
         for method, scores in score_grid.items():
             for fraction in fractions:
                 method_scores = (
-                    scores[:, 0] if method == "direct_coordinate_taylor" else scores[:, column]
+                    scores[:, 0]
+                    if method == "direct_coordinate_taylor"
+                    else scores[:, column]
                 )
                 selected, actual = select_parameter_budget(
                     method_scores.clamp_min(0), sizes, scope, fraction
                 )
                 if ablation == "mean":
-                    intervention = mean_ablate_mlp_activations(
-                        layout, selected, means
-                    )
+                    intervention = mean_ablate_mlp_activations(layout, selected, means)
                 elif ablation == "zero":
                     intervention = zero_ablate_mlp_activations(layout, selected)
                 else:
@@ -309,18 +313,14 @@ def run_study(
             )
     matched = {
         method: {
-            f"{fraction:g}": paired(
-                records, method, method + "_permuted", fraction
-            )
+            f"{fraction:g}": paired(records, method, method + "_permuted", fraction)
             for fraction in fractions
         }
         for method in prototype_methods
     }
     exact_name = "exact_rbf_scale_0.1"
     matched[exact_name] = {
-        f"{fraction:g}": paired(
-            records, exact_name, exact_name + "_permuted", fraction
-        )
+        f"{fraction:g}": paired(records, exact_name, exact_name + "_permuted", fraction)
         for fraction in fractions
     }
     best_prototype = max(
@@ -411,10 +411,13 @@ def main() -> None:
         "--weight-mode", choices=("raw", "normalized"), default="normalized"
     )
     parser.add_argument("--ablation", choices=("mean", "zero"), default="mean")
-    parser.add_argument("--prototype-counts", type=int, nargs="+", default=[200, 400, 800])
+    parser.add_argument(
+        "--prototype-counts", type=int, nargs="+", default=[200, 400, 800]
+    )
     parser.add_argument(
         "--prototype-scales", type=float, nargs="+", default=[0.025, 0.05, 0.1, 0.25]
     )
+    parser.add_argument("--fractions", type=float, nargs="+", default=[0.0002, 0.001])
     args = parser.parse_args()
     if args.weight_mode == "raw" and args.rebuild_source_offset is None:
         parser.error("raw sensitivity requires --rebuild-source-offset")
@@ -425,9 +428,11 @@ def main() -> None:
 
     payload = torch.load(args.input, map_location="cpu", weights_only=True)
     raw_dataset = ImageFolder(args.data / "validation")
-    representation_model = AutoModel.from_pretrained(
-        "facebook/dinov2-small", local_files_only=True
-    ).cuda().eval()
+    representation_model = (
+        AutoModel.from_pretrained("facebook/dinov2-small", local_files_only=True)
+        .cuda()
+        .eval()
+    )
     processor = AutoImageProcessor.from_pretrained(
         "facebook/dinov2-small", local_files_only=True
     )
@@ -456,9 +461,11 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    model = timm.create_model(
-        "vit_base_patch16_224.augreg2_in21k_ft_in1k", pretrained=True
-    ).cuda().eval()
+    model = (
+        timm.create_model("vit_base_patch16_224.augreg2_in21k_ft_in1k", pretrained=True)
+        .cuda()
+        .eval()
+    )
     transform = timm.data.create_transform(
         **timm.data.resolve_model_data_config(model), is_training=False
     )
@@ -490,6 +497,7 @@ def main() -> None:
         target_features,
         target_shift=args.target_shift,
         queries=args.queries,
+        fractions=tuple(args.fractions),
         prototype_counts=tuple(args.prototype_counts),
         prototype_scales=tuple(args.prototype_scales),
         weight_mode=args.weight_mode,
