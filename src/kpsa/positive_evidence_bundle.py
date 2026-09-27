@@ -1503,6 +1503,193 @@ def plot_resolution_sweep(rows, output):
     save_plot(fig, output)
 
 
+def plot_scale_resolution_summary(
+    atlas_rows,
+    resolution_rows,
+    selected_source_examples,
+    output,
+):
+    """Compact main-text summary of construction scale and group resolution."""
+    development = [row for row in atlas_rows if row["split"] == "development"]
+    counts = sorted({row["source_examples"] for row in development})
+    fig, axes = plt.subplots(1, 4, figsize=(11.3, 2.75))
+
+    fractions = sorted(
+        {
+            row["parameter_fraction"]
+            for row in development
+            if row["kind"] == "causal_gain"
+        }
+    )
+    for fraction, color, marker in zip(
+        fractions,
+        (PRIMARY, SECONDARY),
+        ("o", "s"),
+    ):
+        selected = sorted(
+            [
+                row
+                for row in development
+                if row["kind"] == "causal_gain"
+                and row["comparison"] == "scalar"
+                and row["method"] == "prototype_rbf"
+                and row["parameter_fraction"] == fraction
+            ],
+            key=lambda row: row["source_examples"],
+        )
+        x = np.asarray([row["source_examples"] for row in selected])
+        mean = np.asarray([row["mean"] for row in selected])
+        axes[0].plot(
+            x,
+            mean,
+            color=color,
+            marker=marker,
+            linewidth=1.3,
+            markersize=3.5,
+            label=f"{fraction * 100:g}% budget",
+        )
+        axes[0].fill_between(
+            x,
+            [row["ci95_low"] for row in selected],
+            [row["ci95_high"] for row in selected],
+            color=color,
+            alpha=0.12,
+            linewidth=0,
+        )
+    axes[0].set_title("A  Accuracy vs. source count", loc="left", fontsize=8)
+    axes[0].set_ylabel("Causal gain vs scalar")
+
+    costs = {}
+    for row in development:
+        if row["estimated_batched_break_even_queries"] != "":
+            costs.setdefault(
+                row["source_examples"],
+                row["estimated_batched_break_even_queries"],
+            )
+    axes[1].plot(
+        counts,
+        [costs[count] for count in counts],
+        color=BLACK,
+        marker="D",
+        linewidth=1.3,
+        markersize=3.5,
+        label="Batched break-even",
+    )
+    axes[1].set_title("B  Construction amortization", loc="left", fontsize=8)
+    axes[1].set_ylabel("Break-even queries")
+    axes[1].ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+
+    resolutions = ("feature", "bundle_4", "bundle_32", "mlp_block")
+    resolution_labels = ("Feature", "4 features", "32 features", "MLP block")
+    resolution_x = np.arange(len(resolutions))
+    for method, color, marker, label in (
+        ("exact_rbf", PRIMARY, "o", "Exact RBF"),
+        ("prototype_rbf", SECONDARY, "s", "Prototype atlas"),
+        ("scalar_mass", GRAY, "x", "Scalar sensitivity"),
+    ):
+        selected = [
+            next(
+                row
+                for row in resolution_rows
+                if row["resolution"] == resolution
+                and row["assay"] == "query_fidelity"
+                and row["method"] == method
+            )
+            for resolution in resolutions
+        ]
+        axes[2].errorbar(
+            resolution_x,
+            [row["mean"] for row in selected],
+            yerr=(
+                [row["mean"] - row["ci95_low"] for row in selected],
+                [row["ci95_high"] - row["mean"] for row in selected],
+            ),
+            color=color,
+            marker=marker,
+            linewidth=1.3,
+            markersize=3.5,
+            capsize=2,
+            label=label,
+        )
+    axes[2].set_title("C  Resolution fidelity", loc="left", fontsize=8)
+    axes[2].set_ylabel("Cold-profile Spearman")
+    axes[2].set_xticks(
+        resolution_x, resolution_labels, rotation=28, ha="right", fontsize=6.5
+    )
+    axes[2].set_xlabel("Parameter-group resolution")
+
+    for assay, color, marker, label in (
+        ("neuron_deactivation", PRIMARY, "o", "Neuron localization"),
+        ("parameter_influence", SECONDARY, "s", "Parameter influence"),
+    ):
+        selected = [
+            next(
+                row
+                for row in resolution_rows
+                if row["resolution"] == resolution
+                and row["assay"] == assay
+                and row["method"] == "prototype_rbf"
+            )
+            for resolution in resolutions
+        ]
+        storage_mib = np.asarray(
+            [row["atlas_bytes_float32"] / 2**20 for row in selected]
+        )
+        recovery = np.asarray(
+            [
+                0.0
+                if row["oracle_gap_recovered"] in ("", None)
+                else row["oracle_gap_recovered"]
+                for row in selected
+            ]
+        )
+        axes[3].plot(
+            storage_mib,
+            recovery,
+            color=color,
+            marker=marker,
+            linewidth=1.3,
+            markersize=4,
+            label=label,
+        )
+        for x, y, short in zip(storage_mib, recovery, ("F", "4", "32", "B")):
+            axes[3].annotate(
+                short,
+                (x, y),
+                xytext=(2, 3),
+                textcoords="offset points",
+                fontsize=6,
+                color=color,
+            )
+    axes[3].set_title("D  Utility--storage tradeoff", loc="left", fontsize=8)
+    axes[3].set_xscale("log")
+    axes[3].set_xlabel("Atlas storage (MiB); F/4/32/B = resolution")
+    axes[3].set_ylabel("Direct-reference gap recovered")
+    axes[3].set_ylim(bottom=0)
+
+    for axis in axes[:2]:
+        axis.set_xscale("log", base=2)
+        axis.set_xticks(
+            counts,
+            [f"{count:,}" for count in counts],
+            rotation=35,
+            ha="right",
+            fontsize=6.5,
+        )
+        axis.set_xlabel("Source images, $N$")
+        axis.axvline(1600, color=SECONDARY, linestyle="--", linewidth=0.8)
+        axis.axvline(
+            selected_source_examples,
+            color=BLACK,
+            linestyle=":",
+            linewidth=0.8,
+        )
+    for axis in axes:
+        axis.grid(axis="y", color="#E5E5E5", linewidth=0.6)
+    outside_legend(fig, axes, ncol=8, fontsize=6.2)
+    save_plot(fig, output)
+
+
 def build_cost_accuracy_table(path):
     payload = read_json(path)
     online = payload["online"]
@@ -2305,10 +2492,16 @@ def plot_application1_summary(deactivation_rows, cost_rows, protein_rows, output
             [row["mean"] / references[row["parameter_fraction"]] for row in selected]
         )
         low = np.asarray(
-            [row["ci95_low"] / references[row["parameter_fraction"]] for row in selected]
+            [
+                row["ci95_low"] / references[row["parameter_fraction"]]
+                for row in selected
+            ]
         )
         high = np.asarray(
-            [row["ci95_high"] / references[row["parameter_fraction"]] for row in selected]
+            [
+                row["ci95_high"] / references[row["parameter_fraction"]]
+                for row in selected
+            ]
         )
         if method == "activation_attribution":
             means = np.ones_like(means)
@@ -2379,7 +2572,9 @@ def plot_application1_summary(deactivation_rows, cost_rows, protein_rows, output
                 row["mean"] for row in current if row["method"] == "Scalar sensitivity"
             )
             reference = next(
-                row["mean"] for row in current if row["method"] == "Activation attribution"
+                row["mean"]
+                for row in current
+                if row["method"] == "Activation attribution"
             )
             mean = next(row["mean"] for row in current if row["method"] == method)
             values.append(100 * (mean - scalar) / (reference - scalar))
@@ -2460,37 +2655,32 @@ def plot_application2_summary(
         ("Categorical class space", GRAY),
         ("Nearest example", orange),
         ("Shuffled semantic pairing", LIGHT),
+        ("Scalar sensitivity", BLACK),
     )
     positions = np.arange(len(structure_methods))
-    width = 0.34
-    for offset, metric, label, alpha in (
-        (-0.5, "within_class_circuit_jaccard", "Within class", 1.0),
-        (0.5, "between_class_circuit_jaccard", "Between class", 0.42),
-    ):
-        values = [
-            next(
-                row["mean"]
-                for row in interpretability_rows
-                if row["method"] == method and row["metric"] == metric
-            )
-            for method, _ in structure_methods
-        ]
-        axes[1].bar(
-            positions + offset * width,
-            values,
-            width,
-            color=[color for _, color in structure_methods],
-            alpha=alpha,
-            label=label,
+    values = [
+        next(
+            row["mean"]
+            for row in interpretability_rows
+            if row["method"] == method
+            and row["metric"] == "direct_gradient_top_group_overlap"
         )
+        for method, _ in structure_methods
+    ]
+    axes[1].bar(
+        positions,
+        values,
+        0.68,
+        color=[color for _, color in structure_methods],
+    )
     axes[1].set_xticks(
         positions,
-        ["Semantic", "Categorical", "Nearest", "Shuffle"],
+        ["Semantic", "Categorical", "Nearest", "Shuffle", "Scalar"],
         rotation=18,
         ha="right",
     )
-    axes[1].set_ylabel("Circuit-set Jaccard")
-    axes[1].set_title("B  Circuit regularity")
+    axes[1].set_ylabel("Direct-gradient top-8 overlap")
+    axes[1].set_title("B  Circuit recovery")
 
     for dataset, color, marker in (
         ("ETTh1", PRIMARY, "o"),
@@ -2815,6 +3005,13 @@ def main():
             resolution_rows,
             output / "figures" / "parameter_resolution",
         )
+    if atlas_size_path.exists() and resolution_path.exists():
+        plot_scale_resolution_summary(
+            atlas_size_rows,
+            resolution_rows,
+            selected_source_examples,
+            output / "figures" / "paper_scale_resolution_summary",
+        )
     if cost_accuracy_path.exists():
         cost_rows = build_cost_accuracy_table(cost_accuracy_path)
         write_csv(output / "tables" / "vision_cost_accuracy.csv", cost_rows)
@@ -2920,6 +3117,7 @@ def main():
     strengthening_figures = (
         "parameter_influence_interpretability_imagenet1000",
         "parameter_influence_exemplars_imagenet1000",
+        "parameter_influence_structure_imagenet1000",
     )
     for stem in strengthening_figures:
         for suffix in (".png", ".pdf"):
@@ -3022,7 +3220,9 @@ def main():
         },
         {
             "candidate": "Time-series parameter influence circuits",
-            "status": "supported secondary" if timeseries_summary_path.exists() else "not run",
+            "status": "supported secondary"
+            if timeseries_summary_path.exists()
+            else "not run",
             "gate": (
                 "Frozen Chronos-Bolt RBF circuit beats scalar and matched shuffle "
                 "on ETTh1 and Weather and recovers 31--67% of the direct-gradient gap"
