@@ -6,16 +6,11 @@ distribution weighted by squared parameter-gradient sensitivity. A frozen
 atlas can then retrieve input-conditioned parameter groups without running a
 new backward pass for every query.
 
-This repository is the lean experiment supplement for the current paper. It
-contains the estimator, the retained vision, forecasting, and protein
-experiments, causal interventions, analysis code, and the result-bundle
-generator. Historical experiments remain available in Git history; private
-specifications, datasets, checkpoints, and result artifacts live in the
-sibling `kpsa-internal` repository.
+This repository is the lean experiment supplement for the current paper.
 
 ## Evidence in the supplement
 
-The retained code supports two applications:
+We use the method in two application:
 
 1. **Input-conditioned localization.** KPSA predicts parameter groups with high
    per-query sensitivity and evaluates them with exact activation ablations.
@@ -48,7 +43,7 @@ and cost-accuracy ablations used to delimit the claims.
 
 ## Environment and verification
 
-The recorded environment is Python 3.12 with PyTorch 2.13.0+cu130 on one RTX
+We use Python 3.12 with PyTorch 2.13.0+cu130 on one RTX
 5090. Install the locked environment or the package with its optional
 forecasting dependency:
 
@@ -56,7 +51,7 @@ forecasting dependency:
 python -m pip install -e '.[timeseries]'
 ```
 
-Run the focused supplement tests and lint checks:
+Run the supplement tests and lint checks:
 
 ```bash
 PYTHONPATH=src python -m pytest -q
@@ -84,4 +79,3 @@ PYTHONPATH=src python -m kpsa.timeseries_parameter_influence_v8 --help
 PYTHONPATH=src python -m kpsa.protein_neuron_localization_v8 --help
 ```
 
-Experiment outputs are deliberately written outside this public codebase.
