@@ -31,7 +31,7 @@ from .vision_sample_refined import encode_indices
 METHODS = {
     "prototype_800_scale_0.025": "Semantic KPSA",
     "class_onehot": "Categorical KPSA",
-    "nearest_encoder": "Semantic nearest",
+    "nearest_encoder": "KPSA-1NN",
     "scalar_mass": "Constant sensitivity",
     "direct_coordinate_taylor": "Activation attribution",
 }

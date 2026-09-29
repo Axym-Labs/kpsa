@@ -1,4 +1,4 @@
-"""Input-conditioned parameter influence circuits for the vision atlas.
+"""Sensitivity-circuit experiments for the vision atlas.
 
 The sensitivity atlas stores squared parameter-gradient energy.  Its natural
 causal estimand is therefore susceptibility to an isotropic local parameter
@@ -45,9 +45,11 @@ def _group_seed(seed: int, spec_index: int, group_index: int) -> int:
     """Mix intervention, tensor, and group identifiers into a stable RNG seed."""
     modulus = 2**63 - 25
     return int(
-        (seed * 6_364_136_223_846_793_005
-         + (spec_index + 1) * 1_442_695_040_888_963_407
-         + (group_index + 1) * 2_862_933_555_777_941_757)
+        (
+            seed * 6_364_136_223_846_793_005
+            + (spec_index + 1) * 1_442_695_040_888_963_407
+            + (group_index + 1) * 2_862_933_555_777_941_757
+        )
         % modulus
     )
 
@@ -112,9 +114,7 @@ def additive_group_noise(
 
 
 @torch.no_grad()
-def scoped_parameter_rms(
-    partition: ParameterPartition, scope: torch.Tensor
-) -> float:
+def scoped_parameter_rms(partition: ParameterPartition, scope: torch.Tensor) -> float:
     """RMS of all parameter coordinates owned by groups in ``scope``."""
     if scope.shape != (partition.n_groups,) or scope.dtype != torch.bool:
         raise ValueError("scope must be one Boolean flag per parameter group")
@@ -169,11 +169,7 @@ def paired_metric(records, method, baseline, fraction, metric):
 
 def _gap_recovery(method, scalar, oracle):
     denominator = oracle["mean"] - scalar["mean"]
-    return (
-        (method["mean"] - scalar["mean"]) / denominator
-        if denominator > 0
-        else None
-    )
+    return (method["mean"] - scalar["mean"]) / denominator if denominator > 0 else None
 
 
 def run_study(
@@ -220,7 +216,9 @@ def run_study(
     else:
         predictions = dict(precomputed_predictions)
         prediction_metadata = prediction_metadata or {}
-        construction_median = prediction_metadata["construction_median_squared_distance"]
+        construction_median = prediction_metadata[
+            "construction_median_squared_distance"
+        ]
         source_median = prediction_metadata["source_median_squared_distance"]
         source_examples = int(prediction_metadata["source_examples"])
     predictions["direct_gradient_oracle"] = payload["target_profiles"].float()
@@ -239,9 +237,12 @@ def run_study(
     }
 
     target_indices = payload["target_indices"].long()
-    query_columns = torch.linspace(
-        0, len(target_indices) - 1, min(queries, len(target_indices))
-    ).round().long().unique()
+    query_columns = (
+        torch.linspace(0, len(target_indices) - 1, min(queries, len(target_indices)))
+        .round()
+        .long()
+        .unique()
+    )
     records = []
     started = time.perf_counter()
     for position, column in enumerate(query_columns.tolist()):
@@ -352,9 +353,7 @@ def run_study(
                     fraction,
                     "target_squared_susceptibility",
                 ),
-                "oracle_gap_recovered": _gap_recovery(
-                    current[method], scalar, oracle
-                ),
+                "oracle_gap_recovered": _gap_recovery(current[method], scalar, oracle),
                 "off_class_selectivity": paired_t_summary(
                     list(
                         _mean_by_query(
@@ -381,14 +380,12 @@ def run_study(
                 f"prototype_{prototype_count}_scale_{prototype_scale:g}",
             )
         }
-        comparisons[key]["exact_rbf_scale_0.1"]["vs_shuffled_pairing"] = (
-            paired_metric(
-                records,
-                "exact_rbf_scale_0.1",
-                "exact_rbf_scale_0.1_permuted",
-                fraction,
-                "target_squared_susceptibility",
-            )
+        comparisons[key]["exact_rbf_scale_0.1"]["vs_shuffled_pairing"] = paired_metric(
+            records,
+            "exact_rbf_scale_0.1",
+            "exact_rbf_scale_0.1_permuted",
+            fraction,
+            "target_squared_susceptibility",
         )
         prototype = f"prototype_{prototype_count}_scale_{prototype_scale:g}"
         comparisons[key][prototype]["vs_shuffled_pairing"] = paired_metric(
@@ -468,9 +465,11 @@ def main() -> None:
 
     payload = torch.load(args.input, map_location="cpu", weights_only=True)
     raw_dataset = ImageFolder(args.data / "validation")
-    representation_model = AutoModel.from_pretrained(
-        "facebook/dinov2-small", local_files_only=True
-    ).cuda().eval()
+    representation_model = (
+        AutoModel.from_pretrained("facebook/dinov2-small", local_files_only=True)
+        .cuda()
+        .eval()
+    )
     processor = AutoImageProcessor.from_pretrained(
         "facebook/dinov2-small", local_files_only=True
     )
@@ -536,9 +535,11 @@ def main() -> None:
     gc.collect()
     torch.cuda.empty_cache()
 
-    model = timm.create_model(
-        "vit_base_patch16_224.augreg2_in21k_ft_in1k", pretrained=True
-    ).cuda().eval()
+    model = (
+        timm.create_model("vit_base_patch16_224.augreg2_in21k_ft_in1k", pretrained=True)
+        .cuda()
+        .eval()
+    )
     transform = timm.data.create_transform(
         **timm.data.resolve_model_data_config(model), is_training=False
     )
@@ -587,9 +588,7 @@ def main() -> None:
             "exact_rbf_scale_0.1": scaled["exact_rbf"],
             "exact_rbf_scale_0.1_permuted": scaled["exact_rbf_permuted"],
             "prototype_800_scale_0.025": scaled["prototype_rbf"],
-            "prototype_800_scale_0.025_permuted": scaled[
-                "prototype_rbf_permuted"
-            ],
+            "prototype_800_scale_0.025_permuted": scaled["prototype_rbf_permuted"],
             "nearest_encoder": source_profiles[:, cosine.argmax(0)],
             "class_onehot": class_profiles,
             "scalar_mass": scaled["scalar_mass"],

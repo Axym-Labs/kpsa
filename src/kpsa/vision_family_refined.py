@@ -136,7 +136,9 @@ def main() -> None:
     parser.add_argument("--profiles", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
-        "--wordnet", type=Path, default=Path("/home/davwis/nltk_data/corpora/wordnet.zip")
+        "--wordnet",
+        type=Path,
+        default=Path.home() / "nltk_data/corpora/wordnet.zip",
     )
     parser.add_argument("--maximum-family-size", type=int, default=15)
     args = parser.parse_args()

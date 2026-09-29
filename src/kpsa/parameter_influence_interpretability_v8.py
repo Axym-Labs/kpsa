@@ -1,4 +1,4 @@
-"""Interpretability assays for input-conditioned parameter-influence circuits."""
+"""Interpretability assays for KPSA sensitivity circuits."""
 
 from __future__ import annotations
 
@@ -407,7 +407,6 @@ def run_study(
         group_labels=group_labels,
         categories=categories,
     )
-
 
     exemplar_records = []
     for query in selected_queries:

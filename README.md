@@ -14,10 +14,9 @@ We use the method in two applications:
 
 1. **Input-conditioned localization.** KPSA predicts parameter groups with high
    per-query sensitivity and evaluates them with exact activation ablations.
-2. **Input-conditioned parameter-influence circuits.** KPSA retrieves groups
-   whose direct parameter perturbation changes the requested output, then tests
-   the resulting circuits with causal interventions and interpretability
-   controls.
+2. **Sensitivity circuits.** KPSA retrieves sparse parameter sets whose direct
+   perturbation changes the requested output, then tests those sets with causal
+   interventions and interpretability controls.
 
 The experiments cover pretrained vision transformers, a pretrained time-series
 foundation model, and a pretrained protein transformer. The result bundle also
@@ -60,23 +59,18 @@ PYTHONPATH=src python -m pytest -q
 python -m ruff check src tests
 ```
 
-## Regenerating the result bundle
+## Running experiments
 
-The bundle generator consumes the recorded metric files from the private
-empirical repositories and performs no model inference:
-
-```bash
-PYTHONPATH=src python -m kpsa.positive_evidence_bundle \
-  --arc ../kpsa-internal/05_refined_scope \
-  --strengthening-arc ../kpsa-internal/06_strenghening \
-  --output ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results \
-  --zip ../kpsa-internal/05_refined_scope/artifacts/positive_evidence_results_2026-09-27.zip
-```
-
-Key experiment modules expose their full configuration through `--help`:
+Key experiment modules expose their full configuration through `--help`.
+They write their recorded metrics to the path supplied with `--output`:
 
 ```bash
 PYTHONPATH=src python -m kpsa.imagenet1k_parameter_influence_confirmation_v8 --help
 PYTHONPATH=src python -m kpsa.timeseries_parameter_influence_v8 --help
 PYTHONPATH=src python -m kpsa.protein_neuron_localization_v8 --help
 ```
+
+The accompanying paper-artifact directory contains the frozen aggregate
+tables used for the reported figures, together with the figure-generation
+scripts. These aggregates allow the plots and numerical tables to be rebuilt
+without rerunning model inference.

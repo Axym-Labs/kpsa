@@ -26,7 +26,7 @@ from .paper_style import (
 CANONICAL_METHODS = (
     "Semantic KPSA",
     "Categorical KPSA",
-    "Semantic nearest",
+    "KPSA-1NN",
     "Constant sensitivity",
     "Activation attribution",
     "Direct gradient",
@@ -161,7 +161,103 @@ def normalized_series(
     return rows
 
 
+def absolute_series(
+    payload,
+    *,
+    budget_field,
+    budgets,
+    budget_percent,
+    metric,
+    metric_label,
+    query_field,
+    method_map,
+    valid_field=None,
+):
+    """Bootstrap native-scale query means by method and budget."""
+    rows = []
+    for budget in budgets:
+        values = _query_method_values(
+            payload["records"],
+            budget_field=budget_field,
+            budget=budget,
+            metric=metric,
+            query_field=query_field,
+            method_map=method_map,
+            valid_field=valid_field,
+        )
+        shared_queries = sorted(
+            set.intersection(*(set(method_values) for method_values in values.values()))
+        )
+        for method in CANONICAL_METHODS:
+            if method not in values:
+                continue
+            current = np.asarray(
+                [values[method][query] for query in shared_queries], dtype=np.float64
+            )
+            rng = np.random.default_rng(
+                81_019 + round(1e7 * budget) + CANONICAL_METHODS.index(method)
+            )
+            sampled = rng.integers(0, len(current), size=(5000, len(current)))
+            bootstrap_means = current[sampled].mean(1)
+            ci_low, ci_high = np.quantile(bootstrap_means, (0.025, 0.975))
+            rows.append(
+                {
+                    "budget": float(budget_percent[budget]),
+                    "method": method,
+                    "metric": metric_label,
+                    "mean": float(current.mean()),
+                    "ci95_low": float(ci_low),
+                    "ci95_high": float(ci_high),
+                    "queries": len(current),
+                }
+            )
+    return rows
+
+
 def application1_series(vision_path, protein_path):
+    vision = _read(vision_path)
+    protein = _read(protein_path)
+    fractions = tuple(vision["protocol"]["fractions"])
+    protein_fractions = tuple(protein["protocol"]["fractions"])
+    return {
+        "Vision": absolute_series(
+            vision,
+            budget_field="fraction",
+            budgets=fractions,
+            budget_percent={fraction: 100 * fraction for fraction in fractions},
+            metric="degradation",
+            metric_label="target_margin_decrease",
+            query_field="query_column",
+            valid_field="target_correct",
+            method_map={
+                "prototype_800_scale_0.025": "Semantic KPSA",
+                "class_onehot": "Categorical KPSA",
+                "nearest_encoder": "KPSA-1NN",
+                "scalar_mass": "Constant sensitivity",
+                "direct_coordinate_taylor": "Activation attribution",
+            },
+        ),
+        "Protein": absolute_series(
+            protein,
+            budget_field="fraction",
+            budgets=protein_fractions,
+            budget_percent={fraction: 100 * fraction for fraction in protein_fractions},
+            metric="causal_effect",
+            metric_label="absolute_masked_margin_change",
+            query_field="query",
+            method_map={
+                "exact_rbf": "Semantic KPSA",
+                "categorical": "Categorical KPSA",
+                "nearest": "KPSA-1NN",
+                "scalar": "Constant sensitivity",
+                "activation_attribution": "Activation attribution",
+            },
+        ),
+    }
+
+
+def application1_gap_series(vision_path, protein_path):
+    """Return the normalized Application-1 endpoint used in cost comparisons."""
     vision = _read(vision_path)
     protein = _read(protein_path)
     fractions = tuple(vision["protocol"]["fractions"])
@@ -178,7 +274,7 @@ def application1_series(vision_path, protein_path):
             method_map={
                 "prototype_800_scale_0.025": "Semantic KPSA",
                 "class_onehot": "Categorical KPSA",
-                "nearest_encoder": "Semantic nearest",
+                "nearest_encoder": "KPSA-1NN",
                 "scalar_mass": "Constant sensitivity",
                 "direct_coordinate_taylor": "Activation attribution",
             },
@@ -194,7 +290,7 @@ def application1_series(vision_path, protein_path):
             method_map={
                 "exact_rbf": "Semantic KPSA",
                 "categorical": "Categorical KPSA",
-                "nearest": "Semantic nearest",
+                "nearest": "KPSA-1NN",
                 "scalar": "Constant sensitivity",
                 "activation_attribution": "Activation attribution",
             },
@@ -223,7 +319,7 @@ def application2_series(vision_path, etth1_path, weather_path, protein_path):
             "method_map": {
                 "prototype": "Semantic KPSA",
                 "class_onehot": "Categorical KPSA",
-                "nearest": "Semantic nearest",
+                "nearest": "KPSA-1NN",
                 "scalar": "Constant sensitivity",
                 "direct": "Direct gradient",
             },
@@ -239,7 +335,7 @@ def application2_series(vision_path, etth1_path, weather_path, protein_path):
             "method_map": {
                 "exact_rbf": "Semantic KPSA",
                 "temporal_categorical": "Categorical KPSA",
-                "nearest": "Semantic nearest",
+                "nearest": "KPSA-1NN",
                 "scalar": "Constant sensitivity",
                 "direct_gradient": "Direct gradient",
             },
@@ -255,7 +351,7 @@ def application2_series(vision_path, etth1_path, weather_path, protein_path):
             "method_map": {
                 "exact_rbf": "Semantic KPSA",
                 "temporal_categorical": "Categorical KPSA",
-                "nearest": "Semantic nearest",
+                "nearest": "KPSA-1NN",
                 "scalar": "Constant sensitivity",
                 "direct_gradient": "Direct gradient",
             },
@@ -271,7 +367,7 @@ def application2_series(vision_path, etth1_path, weather_path, protein_path):
             "method_map": {
                 "exact_rbf": "Semantic KPSA",
                 "categorical": "Categorical KPSA",
-                "nearest": "Semantic nearest",
+                "nearest": "KPSA-1NN",
                 "scalar": "Constant sensitivity",
                 "direct_parameter": "Direct gradient",
             },
@@ -333,23 +429,23 @@ def _plot_budget_series(axis, rows, *, ylabel, title, letter, xlabel=True):
 
 
 def plot_application1_primary(series, output):
-    fig, axes = plt.subplots(1, 2, figsize=(7.15, 2.55), sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(7.15, 2.55), sharey=False)
     _plot_budget_series(
         axes[0],
         series["Vision"],
-        ylabel="Oracle gap recovered (%)",
+        ylabel="Target-margin decrease",
         title="Vision",
         letter="A",
     )
     _plot_budget_series(
         axes[1],
         series["Protein"],
-        ylabel="",
+        ylabel="Absolute masked-margin change",
         title="Protein",
         letter="B",
     )
     for axis in axes:
-        axis.set_ylim(-8, 112)
+        axis.set_ylim(bottom=0)
     outside_legend(fig, axes, ncol=5, y=1.08)
     save_plot(fig, output)
 

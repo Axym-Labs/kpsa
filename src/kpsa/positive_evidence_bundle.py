@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from .paper_figures import (
+    application1_gap_series,
     application1_series,
     application2_series,
     plot_application1_efficiency,
@@ -111,8 +112,7 @@ def build_semantic_circuit_table(vision_path, forecast_path):
                             "comparison": "representation_similarity",
                             "metric": "jaccard",
                             "similarity_quantile": "-".join(
-                                f"{value:g}"
-                                for value in current["similarity_quantile"]
+                                f"{value:g}" for value in current["similarity_quantile"]
                             ),
                             "similarity_mean": current["similarity_mean"],
                             "mean": summary["mean"],
@@ -156,12 +156,13 @@ def build_budget_retrieval_table(path):
     fixed_oracle = payload["protocol"].get("fixed_oracle_fraction")
     rows = []
     for method, summaries in payload["summaries"].items():
+        display_method = "KPSA-1NN" if method == "Semantic nearest" else method
         for summary in summaries:
             for metric in ("precision", "recall", "f1"):
                 values = summary[metric]
                 rows.append(
                     {
-                        "method": method,
+                        "method": display_method,
                         "oracle_fraction": summary.get("oracle_fraction", fixed_oracle),
                         "predicted_fraction": summary["predicted_fraction"],
                         "retrieval_multiplier": summary.get("retrieval_multiplier", ""),
@@ -188,7 +189,7 @@ def causal_index(payload, fraction, *, require_off_target=False):
 def build_cold_table(studies):
     methods = {
         "sample_dinov2_rbf_scale_0.1": "Semantic KPSA",
-        "sample_nearest": "Semantic nearest",
+        "sample_nearest": "KPSA-1NN",
         "class_source_onehot_reference": "Categorical KPSA",
         "scalar_mass": "Constant sensitivity",
         "sample_jl": "Random-projection control",
@@ -218,7 +219,7 @@ def build_cold_table(studies):
 def build_causal_tables(studies):
     methods = {
         "sensitivity_atlas_rbf": "Semantic KPSA",
-        "sensitivity_atlas_nearest": "Semantic nearest",
+        "sensitivity_atlas_nearest": "KPSA-1NN",
         "sensitivity_atlas_scalar": "Constant sensitivity",
         "activation_atlas_rbf": "Activation atlas RBF",
         "activation_x_gradient_atlas_rbf": "Act×grad atlas RBF",
@@ -465,14 +466,14 @@ def plot_cold(rows, output):
     splits = list(dict.fromkeys(row["split"] for row in rows))
     methods = [
         "Semantic KPSA",
-        "Semantic nearest",
+        "KPSA-1NN",
         "Categorical KPSA",
         "Constant sensitivity",
         "Random-projection control",
     ]
     styles = {
         "Semantic KPSA": (SEMANTIC, "o", "-"),
-        "Semantic nearest": (NEAREST, "^", ":"),
+        "KPSA-1NN": (NEAREST, "^", ":"),
         "Categorical KPSA": (CATEGORICAL, "s", "--"),
         "Constant sensitivity": (CONSTANT, "x", "-."),
         "Random-projection control": (SHUFFLE, "D", (0, (2, 2))),
@@ -1675,11 +1676,25 @@ def main():
         else protein_feature_path
     )
     app1_series = application1_series(app1_vision_path, app1_protein_path)
-    app1_rows = [
-        {"modality": modality, **row}
-        for modality, rows in app1_series.items()
+    app1_gap = application1_gap_series(app1_vision_path, app1_protein_path)
+    gap_lookup = {
+        (modality, row["budget"], row["method"]): row
+        for modality, rows in app1_gap.items()
         for row in rows
-    ]
+    }
+    app1_rows = []
+    for modality, rows in app1_series.items():
+        for row in rows:
+            gap = gap_lookup[(modality, row["budget"], row["method"])]
+            app1_rows.append(
+                {
+                    "modality": modality,
+                    **row,
+                    "gap_recovery_pct": gap["mean"],
+                    "gap_ci95_low_pct": gap["ci95_low"],
+                    "gap_ci95_high_pct": gap["ci95_high"],
+                }
+            )
     write_csv(output / "tables" / "paper_application1_primary.csv", app1_rows)
     plot_application1_primary(
         app1_series,
@@ -1687,7 +1702,7 @@ def main():
     )
     plot_application1_efficiency(
         cost_accuracy_path,
-        app1_series["Vision"],
+        app1_gap["Vision"],
         atlas_size_rows,
         output / "figures" / "paper_application1_efficiency",
     )
@@ -1906,7 +1921,7 @@ def main():
         ),
         "primary_claim": (
             "amortized sample-conditioned neuron localization and local "
-            "parameter-influence retrieval from a precomputed sensitivity atlas"
+            "sensitivity-circuit retrieval from a precomputed atlas"
         ),
         "figures": sorted(
             str(path.relative_to(output)) for path in (output / "figures").iterdir()

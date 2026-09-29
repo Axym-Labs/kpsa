@@ -24,7 +24,7 @@ WHITE = "#FFFFFF"
 METHOD_STYLES = {
     "Semantic KPSA": {"color": SEMANTIC, "marker": "o", "linestyle": "-"},
     "Categorical KPSA": {"color": CATEGORICAL, "marker": "s", "linestyle": "--"},
-    "Semantic nearest": {"color": NEAREST, "marker": "^", "linestyle": ":"},
+    "KPSA-1NN": {"color": NEAREST, "marker": "^", "linestyle": ":"},
     "Constant sensitivity": {"color": CONSTANT, "marker": "x", "linestyle": "-."},
     "Matched shuffle": {"color": SHUFFLE, "marker": "D", "linestyle": (0, (2, 2))},
     "Direct gradient": {"color": DIRECT, "marker": "P", "linestyle": "-"},

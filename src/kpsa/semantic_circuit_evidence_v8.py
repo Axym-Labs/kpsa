@@ -1,7 +1,7 @@
-"""Cross-modal evidence for semantic KPSA parameter-influence circuits.
+"""Cross-modal evidence for semantic KPSA sensitivity circuits.
 
 The study holds the KPSA query space fixed and asks whether retrieved groups
-form input-conditioned, causally useful circuits beyond a final-layer/readout
+form causally useful, input-specific circuits beyond a final-layer/readout
 effect.  Vision and forecasting use the same 0.1% and 0.5% group budgets,
 full/non-late/late scopes, layer-matched constant controls, and exact
 antithetic parameter perturbations.
@@ -148,9 +148,7 @@ def _paired_records(records, left, right, budget, metric, *, valid=None):
     left_values = _mean_by_query(records, left, budget, metric, valid=valid)
     right_values = _mean_by_query(records, right, budget, metric, valid=valid)
     keys = sorted(left_values.keys() & right_values.keys())
-    return paired_t_summary(
-        [left_values[key] - right_values[key] for key in keys]
-    )
+    return paired_t_summary([left_values[key] - right_values[key] for key in keys])
 
 
 def _summarize_causal(records, budgets, *, valid=None):
@@ -283,9 +281,7 @@ def run_forecast(args) -> None:
     median_distance = float(atlas["median_squared_distance"])
     permutation = atlas["permutation"]
     query_ends = (
-        np.linspace(args.query_start, args.query_stop, args.queries)
-        .round()
-        .astype(int)
+        np.linspace(args.query_start, args.query_stop, args.queries).round().astype(int)
     )
     query_features, query_profiles = _collect(
         experiment, query_ends, label="forecast circuit queries"
@@ -302,8 +298,7 @@ def run_forecast(args) -> None:
     shuffled = source_profiles @ shuffled_kernel / len(source_features)
     constant = source_profiles.mean(1)
     counts = {
-        budget: max(1, math.ceil(budget * experiment.groups))
-        for budget in args.budgets
+        budget: max(1, math.ceil(budget * experiment.groups)) for budget in args.budgets
     }
     similarity = query_features @ query_features.T
     near_similarity = similarity.clone()
@@ -372,9 +367,7 @@ def run_forecast(args) -> None:
                     }
                 )
                 for direction in range(args.directions):
-                    intervention_seed = (
-                        args.seed + query * 100_003 + direction * 1_009
-                    )
+                    intervention_seed = args.seed + query * 100_003 + direction * 1_009
                     with experiment.additive_noise(
                         selected, noise_std, seed=intervention_seed, sign=1
                     ):
@@ -419,11 +412,11 @@ def run_forecast(args) -> None:
                 "units_per_layer": experiment.units_per_layer,
                 "budgets": list(args.budgets),
                 "selected_groups": {f"{k:g}": v for k, v in counts.items()},
-                "nonlate_layers": list(
-                    range(len(experiment.ff_pairs) - late_layers)
-                ),
+                "nonlate_layers": list(range(len(experiment.ff_pairs) - late_layers)),
                 "late_layers": list(
-                    range(len(experiment.ff_pairs) - late_layers, len(experiment.ff_pairs))
+                    range(
+                        len(experiment.ff_pairs) - late_layers, len(experiment.ff_pairs)
+                    )
                 ),
                 "representation": "final Chronos encoder regression-token state",
                 "rbf_scale": args.rbf_scale,
@@ -714,9 +707,11 @@ def _normalized_gain(payload, semantic, constant, budget, metric, *, seed):
     point = 100 * (left_values.mean() - low_values.mean()) / high_values.mean()
     rng = np.random.default_rng(seed)
     draws = rng.integers(0, len(queries), size=(5000, len(queries)))
-    sampled = 100 * (
-        left_values[draws].mean(1) - low_values[draws].mean(1)
-    ) / high_values[draws].mean(1)
+    sampled = (
+        100
+        * (left_values[draws].mean(1) - low_values[draws].mean(1))
+        / high_values[draws].mean(1)
+    )
     low_ci, high_ci = np.quantile(sampled, (0.025, 0.975))
     return float(point), float(low_ci), float(high_ci), len(queries)
 
@@ -832,16 +827,12 @@ def run_plot(args) -> None:
             "row_identifiers": identifiers,
             "cell_value": "share of the 0.5% semantic KPSA selection in block",
         }
-    _plot_structure_panel(
-        axes[0, 1], vision, "B", "Vision: geometry predicts overlap"
-    )
+    _plot_structure_panel(axes[0, 1], vision, "B", "Vision: geometry predicts overlap")
     _plot_gain_panel(axes[0, 2], vision, "C", "Vision: exact causal utility")
     _plot_structure_panel(
         axes[1, 1], forecast, "E", "Forecasting: geometry predicts overlap"
     )
-    _plot_gain_panel(
-        axes[1, 2], forecast, "F", "Forecasting: exact causal utility"
-    )
+    _plot_gain_panel(axes[1, 2], forecast, "F", "Forecasting: exact causal utility")
     outside_legend(fig, axes, ncol=4, y=1.02)
     save_plot(fig, args.output)
     save_json(
