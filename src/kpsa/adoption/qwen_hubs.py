@@ -144,6 +144,7 @@ PROMPTS = [
     "In 1905, Albert Einstein published",
     "To make bread, you first",
     "The capital of France is",
+    "Photosynthesis is the process by which",
 ]
 
 
@@ -166,7 +167,7 @@ def stage_rollouts(args):
                 masks[i // NF, 0, i % NF] = 0
             zero.masks = masks if feats else None
             x = m.tok(prompt, return_tensors="pt").input_ids.cuda()
-            y = m.lm.generate(x, max_new_tokens=24, do_sample=False, pad_token_id=m.tok.eos_token_id)
+            y = m.lm.generate(x, max_new_tokens=40, do_sample=False, pad_token_id=m.tok.eos_token_id)
             zero.masks = None
             out[prompt][name] = m.tok.decode(y[0, x.shape[1] :])
             print(name, "|", prompt, "|", repr(out[prompt][name]), flush=True)
