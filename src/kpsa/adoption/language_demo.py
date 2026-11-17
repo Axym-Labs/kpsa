@@ -20,7 +20,8 @@ import torch.nn.functional as F
 from kpsa.adoption.language import OUT, Models, paragraphs, responses
 
 SITE = Path.home() / "main/pinned/axym-website/public/demo/kpsa/language"
-BUDGETS = [(0.02, 17), (0.05, 43), (0.1, 86)]
+BUDGETS = [(0.01, 9), (0.02, 17), (0.05, 43)]
+TOP = 43
 N_SINGLE = 5
 NF = 3072
 
@@ -70,10 +71,17 @@ def stage_targets(args):
     src_reps = torch.load(OUT / "source_reps.pt")[cand].cuda().float()
     sources = json.loads((OUT / "sources.json").read_text())
     bw2 = scale**2 * pmaps[cand]["median"]
+    # Ranking scope: all MLP features except the few that hold more than 0.5 % of the
+    # sensitivity of every input on average (massive-activation features of block 3
+    # and output features of block 28); scores stay shares of the total sensitivity.
+    constant = torch.load(OUT / "constant_profile.pt").cuda()
+    excluded = (constant > args.exclude).nonzero().flatten()
+    print("excluded", [(int(i) // NF, int(i) % NF, round(float(constant[i]), 4)) for i in excluded], flush=True)
     passages = json.loads((OUT / "demo_passages.json").read_text())[: args.limit or None]
     index = {"model": "Qwen3-0.6B-Base", "queryModel": {"own": "Qwen3-0.6B-Base hidden state", "own_tgt": "Qwen3-0.6B-Base hidden state and target embedding", "emb": "Qwen3-Embedding-0.6B"}[cand],
              "layers": len(m.mlps), "featuresPerLayer": NF, "atlasSources": len(sources),
-             "budgets": [{"pct": p, "k": k} for p, k in BUDGETS], "passages": []}
+             "budgets": [{"pct": p, "k": k} for p, k in BUDGETS], "passages": [],
+             "excluded": {"count": len(excluded), "share": round(float(constant[excluded].sum()), 3)}}
     (SITE / "p").mkdir(parents=True, exist_ok=True)
     needed = set()
     for n, item in enumerate(passages):
@@ -95,7 +103,8 @@ def stage_targets(args):
             z = torch.cat([m.embed_texts([tok.decode(ids[: t + 1]) for t in targets[i : i + 64]]) for i in range(0, len(targets), 64)])
         scores = responses(z, pmaps[cand], scale) @ atlas.T
         scores = scores / scores.sum(1, keepdim=True)
-        top = scores.topk(86, dim=1)
+        scores[:, excluded] = -1.0
+        top = scores.topk(TOP, dim=1)
         # exact deactivation: rows = targets x (single features + budget sets)
         per = N_SINGLE + len(BUDGETS)
         rows = len(targets) * per
@@ -121,7 +130,7 @@ def stage_targets(args):
         top5 = probs[:-1].topk(5, dim=1)
         p_true = probs[:-1].gather(1, tgt_ids[:, None])[:, 0]
         for ti, t in enumerate(targets):
-            feats = [[int(i) // NF, int(i) % NF, round(float(v), 6)] for v, i in zip(top.values[ti], top.indices[ti])]
+            feats = [[int(i) // NF, int(i) % NF, float(f"{float(v):.3g}")] for v, i in zip(top.values[ti], top.indices[ti])]
             needed.update((a, b) for a, b, _ in feats)
             mass = [0.0] * len(m.mlps)
             for a, _, v in feats:
@@ -130,16 +139,16 @@ def stage_targets(args):
             neigh = []
             for v, i in zip(nb.values[ti], nb.indices[ti]):
                 s = sources[int(i)]
-                ctx = s["ids"][max(0, s["t"] - 24) : s["t"]]
-                neigh.append({"text": ("…" if s["t"] > 24 else "") + tok.decode(ctx), "target": tok.decode(s["ids"][s["t"] : s["t"] + 1]),
+                ctx = s["ids"][max(0, s["t"] - 20) : s["t"]]
+                neigh.append({"text": ("…" if s["t"] > 20 else "") + tok.decode(ctx), "target": tok.decode(s["ids"][s["t"] : s["t"] + 1]),
                               "w": round(float(v / w[ti].sum()), 4)})
             out_targets[str(t)] = {
-                "p": round(float(p_true[ti]), 4),
-                "top": [[tok.decode([int(i)]), round(float(v), 4)] for v, i in zip(top5.values[ti], top5.indices[ti])],
+                "p": float(f"{float(p_true[ti]):.3g}"),
+                "top": [[tok.decode([int(i)]), float(f"{float(v):.3g}")] for v, i in zip(top5.values[ti], top5.indices[ti])],
                 "features": feats,
-                "deact": [round(float(v), 4) for v in p_after[ti, :N_SINGLE]],
-                "setEffect": [round(float(v), 4) for v in p_after[ti, N_SINGLE:]],
-                "layerMass": [round(v / tot, 4) for v in mass],
+                "deact": [float(f"{float(v):.3g}") for v in p_after[ti, :N_SINGLE]],
+                "setEffect": [float(f"{float(v):.3g}") for v in p_after[ti, N_SINGLE:]],
+                "layerMass": [round(v / tot, 2) for v in mass],
                 "neighbors": neigh,
             }
         tokens = [tok.decode([i]) for i in ids]
@@ -229,6 +238,7 @@ def main():
     parser.add_argument("--windows", type=int, default=120_000)
     parser.add_argument("--batch", type=int, default=64)
     parser.add_argument("--k", type=int, default=6)
+    parser.add_argument("--exclude", type=float, default=0.004)
     args = parser.parse_args()
     torch.backends.cuda.matmul.allow_tf32 = True
     {"targets": stage_targets, "features": stage_features}[args.stage](args)

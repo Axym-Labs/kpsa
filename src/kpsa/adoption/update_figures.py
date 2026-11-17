@@ -146,13 +146,14 @@ def fig_sparsity(S):
         q = S[m]["q5"]
         img = np.array(q["eff_groups_image"])
         cls = np.array(q["eff_groups_class"])
-        ax.hist(img, bins=bins, color=C[m], alpha=0.35, weights=np.ones_like(img) / len(img), label=f"{LABEL[m]}: single images")
-        ax.hist(cls, bins=bins, color=C[m], histtype="step", lw=1.4, weights=np.ones_like(cls) / len(cls), label=f"{LABEL[m]}: class means")
+        ax.hist(img, bins=bins, color=C[m], alpha=0.35, weights=np.ones_like(img) / len(img), label=f"{LABEL[m].split()[0]}: single images")
+        ax.hist(cls, bins=bins, color=C[m], histtype="step", lw=1.4, weights=np.ones_like(cls) / len(cls), label=f"{LABEL[m].split()[0]}: class means")
     ax.set_xscale("log")
     ax.set_xlabel("Effective number of parameter groups (of 36,864)")
     ax.set_ylabel("Fraction of images or classes")
     ax.set_title("How many groups an image or class depends on")
-    ax.legend(frameon=False, fontsize=6.3, loc="upper left")
+    ax.set_ylim(0, 0.68)
+    ax.legend(frameon=False, fontsize=6.5, loc="upper left", handlelength=1.2)
     ax = axes[1]
     for m in ("supervised", "dino"):
         q = S[m]["q5"]

@@ -5,7 +5,7 @@ Stages:
             source profiles, bandwidth chosen on 1k held-out validation images
   score     classify gallery candidates (for selection)
   queries   per gallery image: prediction, KPSA ranking, activation maps,
-            exact deactivation effects, layer mass, atlas neighbours
+            exact intervention effects, layer mass, atlas neighbours
   features  feature cards: top ImageNet-validation images per feature with maps
 """
 
@@ -29,6 +29,9 @@ SITE = Path.home() / "main/pinned/axym-website/public/demo/kpsa/vision"
 MODEL = "vit_base_patch16_224.augreg2_in21k_ft_in1k"
 BUDGETS = [(0.02, 7), (0.05, 18), (0.1, 37)]
 SCALES = (0.05, 0.1, 0.25)
+# Interventions on the top-ranked set: multiply the features' activations (fc2 inputs).
+FACTORS = (0.5, 0.0, 3.0, 10.0)
+NEIGHBORS = 6
 CROP = 224 / 248
 
 
@@ -143,7 +146,7 @@ class Ablate:
     def _hook(self, layer):
         def hook(module, args):
             x = args[0]
-            if self.masks is not None and layer in self.masks:
+            if self.masks is not None and layer in self.masks:  # per-row multipliers
                 x = x * self.masks[layer][:, None, :]
             self.acts[layer] = x.detach()
             return (x,)
@@ -175,11 +178,13 @@ def stage_queries(args):
     A = atlas["atlas"].cuda().float()
     protos, bw2 = atlas["protos"].cuda(), atlas["bw2"]
     src = atlas["src"].cuda().float()
+    phi_src = responses(src, protos, bw2)
+    gen = torch.Generator(device="cuda").manual_seed(0)
     enc = Encoder()
     gallery = json.loads((ROOT / "gallery/gallery.json").read_text())
-    index = {"model": "ViT-B/16 (AugReg, ImageNet-1k)", "queryModel": "DINOv2-S", "layers": 12,
+    index = {"model": "ViT-B/16 (AugReg, ImageNet-1k)", "queryModel": "DINOv2-S image embedding (self-supervised)", "layers": 12,
              "featuresPerLayer": 3072, "atlasSources": len(src),
-             "budgets": [{"pct": p, "k": k} for p, k in BUDGETS],
+             "budgets": [{"pct": p, "k": k} for p, k in BUDGETS], "factors": list(FACTORS),
              "groups": list(dict.fromkeys(g["group"] for g in gallery)), "images": []}
     needed = set()
     for g in gallery:
@@ -200,13 +205,15 @@ def stage_queries(args):
         scores = scores / scores.sum()
         top = scores.topk(37)
         feats = [(int(i) // 3072, int(i) % 3072, float(v)) for v, i in zip(top.values, top.indices)]
-        rows = len(feats) + len(BUDGETS)
+        n_sets = len(BUDGETS) * len(FACTORS)
+        rows = len(feats) + n_sets
         masks = {l: torch.ones(rows, 3072, device="cuda") for l in range(12)}
         for r, (l, f, _) in enumerate(feats):
             masks[l][r, f] = 0
         for j, (_, k) in enumerate(BUDGETS):
-            for l, f, _ in feats[:k]:
-                masks[l][len(feats) + j, f] = 0
+            for a, factor in enumerate(FACTORS):
+                for l, f, _ in feats[:k]:
+                    masks[l][len(feats) + j * len(FACTORS) + a, f] = factor
         ablate.masks = masks
         p_ab = model(x.expand(rows, -1, -1, -1)).softmax(-1)[:, c]
         ablate.masks = None
@@ -221,25 +228,27 @@ def stage_queries(args):
         for l, _, s in feats:
             mass[l] += s
         tot = sum(mass)
-        w = torch.exp(-torch.cdist(z, src).square()[0] / (2 * bw2))
-        nb = w.topk(6)
+        w = (responses(z, protos, bw2) @ phi_src.T)[0]
+        w = w / w.sum()
+        sorted_w = w.sort(descending=True).values
+        half = int((sorted_w.cumsum(0) < 0.5).sum()) + 1
+        # highest weights first, ties (sources sharing one prototype) in a fixed random order
+        order = torch.argsort(w + torch.rand(w.shape, generator=gen, device="cuda") * 1e-9, descending=True)[:NEIGHBORS]
         neighbors = []
-        for v, i in zip(nb.values, nb.indices):
-            i = int(i)
+        for i in order.tolist():
             save_jpg(Image.open(atlas["src_files"][i]).convert("RGB"), SITE / f"src/{i}.jpg", 128)
-            neighbors.append({"thumb": f"vision/src/{i}.jpg", "label": names[atlas["src_labels"][i]],
-                              "w": round(float(v / w.sum()), 4)})
+            neighbors.append({"thumb": f"vision/src/{i}.jpg", "label": names[atlas["src_labels"][i]], "w": round(float(w[i]), 5)})
         top5 = probs.topk(5)
         q = {"id": gid,
              "prediction": {"label": names[c], "p": round(float(probs[c]), 4),
                             "top5": [[names[int(i)], round(float(v), 4)] for v, i in zip(top5.values, top5.indices)]},
              "features": out_feats,
-             "setEffect": [{"pct": p, "k": k, "p": round(float(p_ab[len(feats) + j]), 4)} for j, (p, k) in enumerate(BUDGETS)],
+             "sets": [[round(float(p_ab[len(feats) + j * len(FACTORS) + a]), 4) for a in range(len(FACTORS))] for j in range(len(BUDGETS))],
              "layerMass": [round(m / tot, 4) for m in mass],
-             "neighbors": neighbors}
+             "neighbors": neighbors, "neighborsHalf": half}
         (SITE / "q").mkdir(parents=True, exist_ok=True)
         (SITE / f"q/{gid}.json").write_text(json.dumps(q, separators=(",", ":")))
-        print(gid, names[c], round(float(probs[c]), 3), "set p", [round(float(v), 3) for v in p_ab[-3:]], flush=True)
+        print(gid, names[c], round(float(probs[c]), 3), "sets", q["sets"], "half", half, flush=True)
     (SITE / "index.json").write_text(json.dumps(index, indent=1))
     torch.save(sorted(needed), WORK / "needed.pt")
 
