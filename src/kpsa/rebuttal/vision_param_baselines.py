@@ -8,7 +8,7 @@ N = 8,000 sources (offsets 0-7 of all 1,000 classes), queries at offset 45 for
 with sigma = 3% of the scoped parameter RMS, 8/19/37 groups. Development
 queries (offset 44, same classes) choose k, ridge strength and the exact-RBF
 scale by direct-gradient energy coverage. The perturbation seeds are ours, so
-numbers are protocol-matched rather than identical to the paper's run.
+with the paper seeds (314,159 + position x 100,003 + direction x 1,009) the shared methods reproduce the paper run.
 """
 
 from __future__ import annotations
@@ -132,8 +132,13 @@ def main():
     memo = {}
     t0 = time.time()
     for pos, row in enumerate(rows):
-        image, label = dataset[int(roles["test"][row])]
-        images, lab = image[None], torch.tensor([int(label)])
+        # The paper evaluates target, same-class and off-class images in one batch of
+        # three and reads the target row; we keep that batch for bitwise-comparable runs.
+        target = int(roles["test"][row])
+        off = int(starts[(int(cols[row]) + 500) % 1000]) + 45
+        samples = [dataset[target], dataset[target + 1], dataset[off]]
+        images = torch.stack([x for x, _ in samples])
+        lab = torch.tensor([int(y) for _, y in samples])
         for m in assay:
             top = torch.topk(preds["test"][m][row], max(COUNTS)).indices.cpu()
             for n in COUNTS:
@@ -143,7 +148,7 @@ def main():
                     sel[scope_idx[top[:n]]] = True
                     vals = []
                     for d in range(args.directions):
-                        seed = 271_828 + row * 100_003 + d * 1_009
+                        seed = 314_159 + row * 100_003 + d * 1_009  # paper seeds (position among the 200 query columns)
                         with torch.no_grad(), additive_group_noise(partition, sel, noise, seed=seed, sign=1):
                             plus = float(margin_values(model, images, lab)[0])
                         with torch.no_grad(), additive_group_noise(partition, sel, noise, seed=seed, sign=-1):
@@ -153,6 +158,29 @@ def main():
                 rec[m][n].append(memo[key])
         if (pos + 1) % 20 == 0:
             print(f"  {pos + 1}/{len(rows)} {time.time() - t0:.0f}s", flush=True)
+    # Reproduction check against the frozen paper records (shared methods).
+    paper = Path("/run/media/davwis/Volume/main/workspace/kpsa-internal/06_strenghening/artifacts/vision/"
+                 "vitb16_imagenet1k_parameter_influence_space_ablation_confirmation_budgets.json")
+    if paper.exists():
+        pr = json.loads(paper.read_text())["records"]
+        col_of = {int(cols[r]): r for r in rows}
+        means = {}
+        for x in pr:
+            if x["target_correct"] and int(x["query_column"]) in col_of:
+                means.setdefault((x["method"], x["selected_groups"], col_of[int(x["query_column"])]), []).append(
+                    x["target_squared_susceptibility"])
+        check = {}
+        for ours, theirs in (("kpsa_proto@0.1", "prototype"), ("knn@1", "nearest"), ("class_average", "class_onehot"),
+                             ("scalar", "scalar"), ("direct", "direct")):
+            rel = []
+            for n in COUNTS:
+                for i, r in enumerate(rows):
+                    v = means.get((theirs, n, r))
+                    if v:
+                        rel.append(abs(rec[ours][n][i] - np.mean(v)) / max(abs(np.mean(v)), 1e-12))
+            check[ours] = {"max_rel_diff_vs_paper": float(np.max(rel)) if rel else None, "pairs": len(rel)}
+        result["paper_reproduction"] = check
+        print("paper reproduction", check, flush=True)
     result["assayed"] = assay
     result["n"] = len(rows)
     result["summary"] = {m: {str(n): bootstrap_gap(np.asarray(rec[m][n]), np.asarray(rec["scalar"][n]),

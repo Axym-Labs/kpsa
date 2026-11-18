@@ -82,7 +82,7 @@ class Encoder:
 def build(method, precision, n, k, topk):
     """Return (callable(batch_pixels, labels), static description)."""
     gen = torch.Generator(device="cuda").manual_seed(0)
-    if method in ("attribution", "attribution_cpu", "attribution_multi"):
+    if method in ("attribution", "attribution_cpu", "attribution_multi", "attribution_multi_vjp"):
         import timm
 
         from ..parameter_groups import ParameterPartition
@@ -121,10 +121,24 @@ def build(method, precision, n, k, topk):
             objective = (logits[rows, labels] - alt.max(1).values).sum()
             acts = [captured[nm] for nm in names]
             captured.clear()  # no activation outlives its own query batch
-            grads = None if method == "attribution_multi" else torch.autograd.grad(objective, acts)
+            grads = None if method.startswith("attribution_multi") else torch.autograd.grad(objective, acts)
             if method == "attribution":
                 scores = torch.cat([(g.float() * a.float()).sum(1) for g, a in zip(grads, acts)], 1)
                 return torch.topk(scores, topk, dim=1).indices
+            if method == "attribution_multi_vjp":
+                # Same M functionals, all vector-Jacobian products in one batched backward.
+                tops = logits.topk(k, dim=1).indices
+                objs = []
+                for j in range(k):
+                    lab = tops[:, j]
+                    alt_j = logits.clone()
+                    alt_j[rows, lab] = -torch.inf
+                    objs.append((logits[rows, lab] - alt_j.max(1).values).sum())
+                objs = torch.stack(objs)
+                g_all = torch.autograd.grad(objs, acts, grad_outputs=torch.eye(k, device=objs.device),
+                                            is_grads_batched=True)
+                sc = torch.cat([(g.float() * a.float()[None]).sum(2) for g, a in zip(g_all, acts)], 2)
+                return torch.topk(sc, topk, dim=2).indices
             if method == "attribution_multi":
                 # M functionals: margins of the M highest-scoring classes, one backward each.
                 tops = logits.topk(k, dim=1).indices
@@ -142,6 +156,42 @@ def build(method, precision, n, k, topk):
             for i, (g, a) in enumerate(zip(grads, acts)):
                 scores[:, i * 3072:(i + 1) * 3072] = (g.float() * a.float()).sum(1).cpu()
             return torch.topk(scores, topk, dim=1).indices
+
+        return run, {"stored_bytes": 0}
+    if method == "direct_multi":
+        # Per-query direct-gradient profiles (the Application 2 reference) for M
+        # functionals: one forward, M backward passes through the exact batched
+        # group-energy engine (no parameter gradients are formed).
+        import timm
+
+        from ..parameter_groups import ParameterPartition
+        from .batched_profiles import BatchedPartitionEnergy, freeze
+
+        model = freeze(timm.create_model(MODEL, pretrained=True).cuda().eval())
+        partition = ParameterPartition(model, "swiglu")
+        engine = BatchedPartitionEnergy(model, partition)
+        from ..vision_causal_refined import mlp_feature_layout, mlp_feature_scope
+
+        scope_idx = mlp_feature_scope(partition, mlp_feature_layout(model, partition)).nonzero().flatten().cuda()
+
+        def run(pixels, labels):
+            x = pixels.clone().requires_grad_(True)
+            engine.out = torch.zeros(len(x), partition.n_groups, dtype=torch.float64, device=x.device)
+            with autocast(precision):
+                logits = model(x).float()
+            rows = torch.arange(len(x), device=x.device)
+            tops = logits.topk(k, dim=1).indices
+            out = []
+            for j in range(k):
+                engine.out = torch.zeros(len(x), partition.n_groups, dtype=torch.float64, device=x.device)
+                alt = logits.clone()
+                alt[rows, tops[:, j]] = -torch.inf
+                obj = (logits[rows, tops[:, j]] - alt.max(1).values).sum()
+                torch.autograd.grad(obj, x, retain_graph=j < k - 1)
+                e = engine.out
+                out.append(torch.topk((e / e.sum(1, keepdim=True))[:, scope_idx], topk, dim=1).indices)
+            engine.out = None
+            return out
 
         return run, {"stored_bytes": 0}
     if method == "class_average":
@@ -307,8 +357,8 @@ def main():
     elif args.method == "profile_loop":
         record.update(profile_loop(args.precision, 64))
     else:
-        which = "vit" if args.method.startswith("attribution") else "dino"
-        pixels, labels = load_images(4 * args.batch, which)
+        which = "vit" if args.method.startswith(("attribution", "direct")) else "dino"
+        pixels, labels = load_images(args.batch, which)  # one resident input batch for every method
         pixels, labels = pixels.cuda(), labels.cuda()
         torch.cuda.reset_peak_memory_stats()
         run, static = build(args.method, args.precision, args.n, args.k, args.topk)
