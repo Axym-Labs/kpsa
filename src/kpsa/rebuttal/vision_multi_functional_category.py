@@ -51,6 +51,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--queries", type=int, default=100)
     parser.add_argument("--directions", type=int, default=8)
+    parser.add_argument("--sources", type=int, default=6400,
+                        help="first N sources (class-balanced prefixes of 200k)")
     args = parser.parse_args()
     torch.backends.cuda.matmul.allow_tf32 = False
     import timm
@@ -71,16 +73,17 @@ def main():
     engine = BatchedPartitionEnergy(model, partition)
 
     cols = torch.linspace(0, 199, args.queries).round().long().unique()
-    imgs_s = load_images(dataset, cache["roles"]["source"])
+    src = cache["roles"]["source"][:args.sources]
+    imgs_s = load_images(dataset, src)
     imgs_q = load_images(dataset, cache["roles"]["query49"][cols])
     dummy_s = torch.zeros(len(imgs_s), dtype=torch.long)
     dummy_q = torch.zeros(len(imgs_q), dtype=torch.long)
     cons = cache["features"]["prototype"]
     pm = fit_prototype_response_map(cons, 800, bandwidth_squared=median_squared_distance(cons) * 0.1 ** 2,
                                     seed=91_027 + 800)
-    ps = pm.transform(cache["features"]["source"]).float().cuda()
+    ps = pm.transform(cache["features"]["source"][:args.sources]).float().cuda()
     pq = pm.transform(cache["features"]["query49"][cols]).float().cuda()
-    zs = cache["features"]["source"].cuda()
+    zs = cache["features"]["source"][:args.sources].cuda()
     nearest = (cache["features"]["query49"][cols].cuda() @ zs.T).argmax(1)
 
     def profiles(images, dummy, fn):
@@ -145,6 +148,7 @@ def main():
                 draws.append(np.mean(num / den))
             pooled_ci[m][str(n)] = [float(np.quantile(draws, .025)), float(np.quantile(draws, .975))]
     result = {"functional": "log p(category | x), 16-class-ImageNet categories", "categories": names,
+              "sources": int(args.sources),
               "queries": int(q), "directions": args.directions, "counts": COUNTS, "mean_category_probability": prob,
               "summary_by_functional": summary, "mean_over_functionals": pooled,
               "mean_over_functionals_ci95": pooled_ci,
