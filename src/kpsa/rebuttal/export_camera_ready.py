@@ -203,17 +203,13 @@ def multi():
     rows = [{"method": labels[m], "functionals": k, "precision": p, "images_per_second": v["ips"],
              "peak_allocated_bytes": v["peak"], "stored_bytes": v["stored"]}
             for (m, p, n, k), v in sorted(b.items()) if m in labels]
-    # End-to-end KPSA throughput for a fixed workload, construction included:
-    # M atlases from N sources cost one batched gradient-profile pass per source and
-    # functional (the direct_multi measurement), encoding of the sources and of the 800
-    # prototype-construction images, and prototype fitting plus accumulation.
-    enc, fit, queries, n_src = 0.389e-3, 0.137, 50_000, 800
-    for prec in ("fp32",):
-        for k in sorted({k for (m, p, n, k) in b if m == "kpsa_multi_stacked" and p == prec}):
-            direct, kpsa = b[("direct_multi", prec, 6400, k)]["ips"], b[("kpsa_multi_stacked", prec, 6400, k)]["ips"]
-            build = n_src / direct + n_src * enc + 800 * enc + fit * k
-            rows.append({"method": "Semantic KPSA (end-to-end, 800 sources, 50k queries)", "functionals": k,
-                         "precision": prec, "images_per_second": queries / (build + queries / kpsa),
+    # End-to-end KPSA throughput, timed in one run per functional count (e2e_multi_bench):
+    # building M atlases from 800 sources, then answering 50,000 queries.
+    for line in (RESULTS / "e2e_multi.jsonl").read_text().splitlines():
+        r = json.loads(line)
+        if r["side"] == "kpsa":
+            rows.append({"method": "Semantic KPSA (end-to-end, 800 sources, 50k queries)", "functionals": r["functionals"],
+                         "precision": "fp32", "images_per_second": r["images_per_second"],
                          "peak_allocated_bytes": "", "stored_bytes": ""})
     write("multi_functional_cost.csv", rows)
     rows = []
