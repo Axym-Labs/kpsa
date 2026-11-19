@@ -67,6 +67,8 @@ class Encoder:
         from transformers import AutoModel
 
         self.model = AutoModel.from_pretrained("facebook/dinov2-small", local_files_only=True).cuda().eval()
+        for p in self.model.parameters():  # frozen like the ViT (no autocast weight cache)
+            p.requires_grad_(False)
         self.precision = precision
 
     @torch.no_grad()
@@ -274,12 +276,14 @@ def measure(run, pixels, labels, batch, warmup, repeats):
         torch.cuda.synchronize()
         times.append(start.elapsed_time(end))
     peak = torch.cuda.max_memory_allocated()
+    peak_reserved = torch.cuda.max_memory_reserved()
     times = torch.tensor(times)
     return {
         "ms_per_batch_median": float(times.median()), "ms_per_batch_mean": float(times.mean()),
         "ms_per_batch_min": float(times.min()),
         "images_per_second_median": batch / float(times.median()) * 1000,
         "images_per_second_best": batch / float(times.min()) * 1000,
+        "peak_reserved_bytes": peak_reserved,
         "static_allocated_bytes": static, "peak_allocated_bytes": peak,
     }
 
@@ -341,6 +345,11 @@ def main():
         from ..kernel_sensitivity import fit_prototype_response_map, median_squared_distance
         gen = torch.Generator().manual_seed(0)
         construction = F.normalize(torch.randn(800, 384, generator=gen), dim=1)
+        # Warm-up: first k-means fit and first cuBLAS call outside the timers.
+        fit_prototype_response_map(construction[:64], 16, bandwidth_squared=1.0, seed=0)
+        warm = torch.rand(64, GROUPS, device="cuda")
+        (warm.T @ warm[:, :64]).sum().item()
+        torch.cuda.synchronize()
         t = time.perf_counter()
         pmap = fit_prototype_response_map(construction, 800,
                                           bandwidth_squared=median_squared_distance(construction) * 0.025**2, seed=0)
