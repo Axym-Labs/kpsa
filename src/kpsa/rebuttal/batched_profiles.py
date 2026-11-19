@@ -124,14 +124,22 @@ class BatchedPartitionEnergy:
             x.register_hook(grad_hook)
         return hook
 
-    def __call__(self, images, labels):
-        """Per-sample margin energies (B, n_groups), float64, on the model device."""
+    def __call__(self, images, labels, functional=None):
+        """Per-sample energies (B, n_groups), float64, on the model device.
+
+        Default functional: the logit margin of `labels`. `functional(logits)`
+        may instead return one scalar per sample (e.g. a category log-probability).
+        """
         device = next(self.model.parameters()).device
         images = images.to(device).requires_grad_(True)
         labels = labels.to(device)
         self.out = torch.zeros(len(images), self.partition.n_groups, dtype=torch.float64, device=device)
         try:
             logits = self.model(images).float()
+            if functional is not None:
+                objective = functional(logits).sum()
+                torch.autograd.grad(objective, images)
+                return self.out
             rows = torch.arange(len(labels), device=device)
             alt = logits.clone()
             alt[rows, labels] = -torch.inf
