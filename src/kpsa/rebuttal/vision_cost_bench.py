@@ -250,16 +250,21 @@ def build(method, precision, n, k, topk):
     encoder = Encoder(precision)
     if method == "encoder":
         return (lambda pixels, labels: encoder(pixels)), {"stored_bytes": 0}
-    if method == "kpsa_multi":
+    if method in ("kpsa_multi", "kpsa_multi_stacked"):
         # M atlases (one per functional) sharing one query representation.
         protos = F.normalize(torch.randn(800, 384, generator=gen, device="cuda"), dim=1)
         atlases = torch.rand(k, GROUPS, 800, generator=gen, device="cuda")
         bw2 = 0.01
 
+        stacked = atlases.reshape(k * GROUPS, 800)  # all M atlases as one matrix
+
         def run(pixels, labels):
             z = encoder(pixels)
             logr = -torch.cdist(z, protos).square() / (2 * bw2)
             r = F.normalize(torch.exp(logr - logr.max(1, keepdim=True).values), dim=1)
+            if method == "kpsa_multi_stacked":
+                # one matrix product and one batched top-k for all M functionals
+                return torch.topk((r @ stacked.T).view(len(r), k, GROUPS), topk, dim=2).indices
             return [torch.topk(r @ atlases[j].T, topk, dim=1).indices for j in range(k)]
 
         return run, {"stored_bytes": (atlases.numel() + protos.numel()) * 4}
@@ -292,6 +297,17 @@ def build(method, precision, n, k, topk):
             return torch.topk(kern @ profiles, topk, dim=1).indices
 
         return run, {"stored_bytes": (profiles.numel() + zs.numel()) * 4}
+    if method == "knn_multi":
+        # 1NN with one full-profile table per functional (M tables of N x G).
+        tables = torch.rand(k, n, GROUPS, generator=gen, device="cuda")
+        del profiles
+
+        def run(pixels, labels):
+            z = encoder(pixels)
+            idx = torch.topk(z @ zs.T, 1, dim=1).indices[:, 0]
+            return torch.topk(tables[:, idx], topk, dim=2).indices
+
+        return run, {"stored_bytes": (tables.numel() + zs.numel()) * 4}
     if method == "knn":
         def run(pixels, labels):
             z = encoder(pixels)
