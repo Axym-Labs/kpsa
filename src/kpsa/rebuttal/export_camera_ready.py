@@ -203,19 +203,33 @@ def multi():
     rows = [{"method": labels[m], "functionals": k, "precision": p, "images_per_second": v["ips"],
              "peak_allocated_bytes": v["peak"], "stored_bytes": v["stored"]}
             for (m, p, n, k), v in sorted(b.items()) if m in labels]
+    # End-to-end KPSA throughput for a fixed workload, construction included:
+    # M atlases from N sources cost one batched gradient-profile pass per source and
+    # functional (the direct_multi measurement), encoding of the sources and of the 800
+    # prototype-construction images, and prototype fitting plus accumulation.
+    enc, fit, queries, n_src = 0.389e-3, 0.137, 50_000, 800
+    for prec in ("fp32",):
+        for k in sorted({k for (m, p, n, k) in b if m == "kpsa_multi_stacked" and p == prec}):
+            direct, kpsa = b[("direct_multi", prec, 6400, k)]["ips"], b[("kpsa_multi_stacked", prec, 6400, k)]["ips"]
+            build = n_src / direct + n_src * enc + 800 * enc + fit * k
+            rows.append({"method": "Semantic KPSA (end-to-end, 800 sources, 50k queries)", "functionals": k,
+                         "precision": prec, "images_per_second": queries / (build + queries / kpsa),
+                         "peak_allocated_bytes": "", "stored_bytes": ""})
     write("multi_functional_cost.csv", rows)
-    acc = json.loads((RESULTS / "vision_multi_functional_category.json").read_text())
     rows = []
-    for c, by in acc["summary_by_functional"].items():
-        for m, cs in by.items():
+    for n_src, name in ((6400, "vision_multi_functional_category.json"),
+                        (800, "vision_multi_functional_category_n800.json")):
+        acc = json.loads((RESULTS / name).read_text())
+        for c, by in acc["summary_by_functional"].items():
+            for m, cs in by.items():
+                for cnt, v in cs.items():
+                    rows.append({"sources": n_src, "functional": c, "method": m, "selected_groups": cnt,
+                                 "gap_recovered": v[0], "ci95_low": v[1], "ci95_high": v[2], "queries": acc["queries"]})
+        for m, cs in acc["mean_over_functionals"].items():
             for cnt, v in cs.items():
-                rows.append({"functional": c, "method": m, "selected_groups": cnt, "gap_recovered": v[0],
-                             "ci95_low": v[1], "ci95_high": v[2], "queries": acc["queries"]})
-    for m, cs in acc["mean_over_functionals"].items():
-        for cnt, v in cs.items():
-            lo, hi = acc["mean_over_functionals_ci95"][m][cnt]
-            rows.append({"functional": "mean", "method": m, "selected_groups": cnt, "gap_recovered": v,
-                         "ci95_low": lo, "ci95_high": hi, "queries": acc["queries"]})
+                lo, hi = acc["mean_over_functionals_ci95"][m][cnt]
+                rows.append({"sources": n_src, "functional": "mean", "method": m, "selected_groups": cnt,
+                             "gap_recovered": v, "ci95_low": lo, "ci95_high": hi, "queries": acc["queries"]})
     write("multi_functional_accuracy.csv", rows)
 
 
