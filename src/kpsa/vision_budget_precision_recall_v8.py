@@ -236,7 +236,7 @@ def run(args):
         payload["class_source_profiles"],
         construction_features,
         prototype_counts=(800,),
-        prototype_scales=(0.025,),
+        prototype_scales=(args.prototype_scale,),
         seed=args.seed,
     )
 
@@ -451,7 +451,12 @@ def main():
         ),
     )
     parser.add_argument("--seed", type=int, default=91_027)
+    parser.add_argument("--prototype-scale", type=float, default=0.025,
+                        help="prototype bandwidth (submission .025; revision .1)")
     args = parser.parse_args()
+    if args.prototype_scale != 0.025:
+        METHODS.pop("prototype_800_scale_0.025")
+        METHODS[f"prototype_800_scale_{args.prototype_scale:g}"] = "Semantic KPSA"
     args.predicted_fractions = tuple(args.predicted_fractions)
     args.oracle_fractions = tuple(args.oracle_fractions)
     args.retrieval_multipliers = tuple(args.retrieval_multipliers)
