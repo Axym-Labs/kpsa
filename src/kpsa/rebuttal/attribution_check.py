@@ -23,12 +23,15 @@ def main():
     pixels, labels = load_images(32, "vit")
     classes = torch.linspace(0, 999, 200).round().long()
     assert torch.equal(cache["roles"]["query49"][:32], classes[:32] * 50 + 49), "image sets differ"
-    run, _ = build("attribution", "fp32", 6400, 1, 37)
-    with torch.enable_grad():
-        got = run(pixels.cuda(), labels.cuda()).cpu()
     ref = torch.topk(cache["query49_attribution"][:32].float(), 37, dim=1).indices
-    overlap = [len(set(a.tolist()) & set(b.tolist())) / 37 for a, b in zip(got, ref)]
-    out = {"images": 32, "top37_overlap_mean": sum(overlap) / 32, "top37_overlap_min": min(overlap)}
+    out = {"images": 32}
+    for method in sys.argv[2:] or ["attribution"]:
+        for prec in ("fp32", "bf16"):
+            run, _ = build(method, prec, 6400, 1, 37)
+            with torch.enable_grad():
+                got = run(pixels.cuda(), labels.cuda()).cpu()
+            overlap = [len(set(a.tolist()) & set(b.tolist())) / 37 for a, b in zip(got, ref)]
+            out[f"{method}_{prec}"] = {"top37_overlap_mean": sum(overlap) / 32, "top37_overlap_min": min(overlap)}
     print(json.dumps(out))
     Path(sys.argv[1]).write_text(json.dumps(out, indent=1))
 

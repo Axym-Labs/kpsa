@@ -84,6 +84,50 @@ class Encoder:
 def build(method, precision, n, k, topk):
     """Return (callable(batch_pixels, labels), static description)."""
     gen = torch.Generator(device="cuda").manual_seed(0)
+    if method == "attribution_stream":
+        # Same attribution, streamed: each layer's score is formed in a gradient hook
+        # as soon as its activation gradient exists, so the 12 activation gradients
+        # are never held together (leaner baseline; re-audit point).
+        import timm
+
+        model = timm.create_model(MODEL, pretrained=True).cuda().eval()
+        for p in model.parameters():
+            p.requires_grad_(False)
+        scores, acts = {}, {}
+
+        def capture(i):
+            # The hook reads the activation from a dict (no tensor -> hook -> tensor
+            # reference cycle, which would keep every graph alive until garbage collection).
+            def hook(_m, inputs):
+                a = inputs[0]
+                if a.requires_grad:
+                    acts[i] = a
+                    a.register_hook(lambda g, i=i: scores.__setitem__(i, (g.float() * acts.pop(i).float()).sum(1)))
+            return hook
+
+        for i, block in enumerate(model.blocks):
+            block.mlp.fc2.register_forward_pre_hook(capture(i))
+
+        def run(pixels, labels):
+            with autocast(precision):
+                x = model.patch_embed(pixels)
+                x = model._pos_embed(x)
+                x = model.norm_pre(x)
+                x.requires_grad_(True)
+                x0 = x
+                for block in model.blocks:
+                    x = block(x)
+                x = model.norm(x)
+                logits = model.forward_head(x).float()
+            rows = torch.arange(len(labels), device=logits.device)
+            alt = logits.clone()
+            alt[rows, labels] = -torch.inf
+            objective = (logits[rows, labels] - alt.max(1).values).sum()
+            torch.autograd.grad(objective, x0)
+            out = torch.cat([scores.pop(i) for i in range(len(model.blocks))], 1)
+            return torch.topk(out, topk, dim=1).indices
+
+        return run, {"stored_bytes": 0}
     if method in ("attribution", "attribution_cpu", "attribution_multi", "attribution_multi_vjp"):
         import timm
 
@@ -366,7 +410,7 @@ def main():
     elif args.method == "profile_loop":
         record.update(profile_loop(args.precision, 64))
     else:
-        which = "vit" if args.method.startswith(("attribution", "direct")) else "dino"
+        which = "vit" if args.method.startswith(("attribution", "direct")) else "dino"  # includes attribution_stream
         pixels, labels = load_images(args.batch, which)  # one resident input batch for every method
         pixels, labels = pixels.cuda(), labels.cuda()
         torch.cuda.reset_peak_memory_stats()
